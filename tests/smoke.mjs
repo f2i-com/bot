@@ -105,6 +105,16 @@ assert.equal(rCustom.displayText, "Full refunds within 30 days!");
 assert.equal(rCustom.emote, "nod");
 assert.equal(rCustom.chips.length, 2);
 
+// Quick-add rules accept `|`-separated alternatives; each one must match on its own.
+const aliasXml = appendAimlRule(STARTER_AIML_PACKS.concierge.xml, {
+  pattern: "# opening hours # | when are you open",
+  answer: "We're open 9 to 5 & always online!",
+});
+assert.equal(inspectAimlXml(aliasXml).valid, true, "Alias rule should produce valid XML");
+botAiml.loadXML(aliasXml);
+assert.equal(botAiml.reply("When are you open?").displayText, "We're open 9 to 5 & always online!");
+assert.equal(botAiml.reply("What are your opening hours today").displayText, "We're open 9 to 5 & always online!");
+
 const badXmlCheck = inspectAimlXml("<aiml><category><pattern>HI</pattern><template>Unclosed</aiml>");
 assert.equal(badXmlCheck.valid, false, "Malformed XML should be caught with line diagnostics");
 

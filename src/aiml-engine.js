@@ -743,7 +743,14 @@ export function inspectAimlXml(xmlString, botProps = {}) {
 
 /** Appends a new `<category>` rule cleanly before `</aiml>` in an AIML XML document. */
 export function appendAimlRule(xmlString, { pattern, answer, chips = [], emote = "" }) {
-  const cleanPattern = normalizeAimlInput(pattern, true) || "HELLO";
+  // Normalize each `|`-separated alternative on its own; normalizing the whole string would strip the
+  // pipes and merge every alias into one long pattern that never matches.
+  const cleanPattern =
+    String(pattern || "")
+      .split("|")
+      .map((alt) => normalizeAimlInput(alt, true))
+      .filter(Boolean)
+      .join(" | ") || "HELLO";
   const chipXml = chips
     .map((c) => c.trim())
     .filter(Boolean)

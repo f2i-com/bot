@@ -3290,7 +3290,14 @@ function inspectAimlXml(xmlString, botProps = {}) {
 
 /** Appends a new `<category>` rule cleanly before `</aiml>` in an AIML XML document. */
 function appendAimlRule(xmlString, { pattern, answer, chips = [], emote = "" }) {
-  const cleanPattern = normalizeAimlInput(pattern, true) || "HELLO";
+  // Normalize each `|`-separated alternative on its own; normalizing the whole string would strip the
+  // pipes and merge every alias into one long pattern that never matches.
+  const cleanPattern =
+    String(pattern || "")
+      .split("|")
+      .map((alt) => normalizeAimlInput(alt, true))
+      .filter(Boolean)
+      .join(" | ") || "HELLO";
   const chipXml = chips
     .map((c) => c.trim())
     .filter(Boolean)
@@ -3815,6 +3822,25 @@ const WIDGET_CSS = `
 *, *::before, *::after {
   box-sizing: border-box;
 }
+.bc-ic {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bc-ic.solid {
+  fill: currentColor;
+  stroke: none;
+}
+button:focus-visible,
+.bc-stage-card:focus-visible {
+  outline: 2px solid #6aa6ff;
+  outline-offset: 2px;
+}
 .bc-root {
   position: fixed;
   z-index: 2147483000;
@@ -3882,7 +3908,8 @@ const WIDGET_CSS = `
   height: var(--bc-h, 204px);
   cursor: pointer;
   user-select: none;
-  filter: drop-shadow(0 10px 26px rgba(10, 14, 26, 0.28));
+  filter: drop-shadow(0 12px 26px rgba(10, 14, 26, 0.3));
+  border-radius: 20px;
   transition: width 0.24s ease, height 0.24s ease, transform 0.18s ease;
 }
 .bc-stage-card:hover {
@@ -3907,11 +3934,12 @@ const WIDGET_CSS = `
   gap: 9px;
   padding: 8px 14px 8px 10px;
   border-radius: 999px;
-  background: #141925;
-  color: #f8fafc;
+  background: #0d1322;
+  color: #f4f7ff;
   border: 1px solid rgba(255,255,255,0.14);
   box-shadow: 0 8px 24px rgba(0,0,0,0.28);
   cursor: pointer;
+  font: inherit;
   font-size: 13.5px;
   font-weight: 600;
 }
@@ -3925,8 +3953,8 @@ const WIDGET_CSS = `
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #2dd4bf;
-  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.24);
+  background: #34d6bf;
+  box-shadow: 0 0 0 3px rgba(52, 214, 191, 0.24);
 }
 
 /* Floating Speech Caption Bubble */
@@ -3938,8 +3966,8 @@ const WIDGET_CSS = `
   max-width: 260px;
   padding: 9px 12px;
   border-radius: 13px;
-  background: rgba(17, 22, 33, 0.94);
-  color: #f8fafc;
+  background: rgba(13, 19, 34, 0.95);
+  color: rgba(244, 247, 255, 0.72);
   font-size: 12.8px;
   line-height: 1.42;
   box-shadow: 0 8px 22px rgba(0,0,0,0.24);
@@ -3957,8 +3985,11 @@ const WIDGET_CSS = `
   opacity: 1;
   transform: translateY(0);
 }
+.bc-caption .said {
+  color: #f4f7ff;
+}
 .bc-caption mark {
-  background: rgba(56, 189, 248, 0.28);
+  background: #b83353;
   color: #ffffff;
   padding: 0 3px;
   border-radius: 4px;
@@ -3973,11 +4004,11 @@ const WIDGET_CSS = `
   white-space: nowrap;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #1764d8;
+  background: #1a5fe6;
   color: #ffffff;
   font-size: 11.5px;
   font-weight: 650;
-  box-shadow: 0 4px 12px rgba(23, 100, 216, 0.45);
+  box-shadow: 0 4px 12px rgba(26, 95, 230, 0.45);
   animation: bcPulse 2s infinite;
   pointer-events: none;
 }
@@ -3991,10 +4022,11 @@ const WIDGET_CSS = `
   margin-top: 6px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 6px;
+  gap: 3px;
+  padding: 4px;
   border-radius: 999px;
-  background: rgba(18, 22, 31, 0.88);
+  background: rgba(13, 19, 34, 0.92);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.12);
   box-shadow: 0 4px 14px rgba(0,0,0,0.22);
@@ -4003,10 +4035,10 @@ const WIDGET_CSS = `
   appearance: none;
   border: none;
   background: transparent;
-  color: #e2e8f0;
+  color: #dbe3f4;
   min-width: 30px;
-  height: 28px;
-  padding: 0 8px;
+  height: 30px;
+  padding: 0 9px;
   border-radius: 999px;
   font: inherit;
   font-size: 12px;
@@ -4015,7 +4047,7 @@ const WIDGET_CSS = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 5px;
   transition: background 0.14s ease, color 0.14s ease;
 }
 .bc-btn:hover {
@@ -4023,11 +4055,11 @@ const WIDGET_CSS = `
   color: #ffffff;
 }
 .bc-btn.accent {
-  background: #1764d8;
+  background: #1a5fe6;
   color: #ffffff;
 }
 .bc-btn.accent:hover {
-  background: #1d70eb;
+  background: #2f71f0;
 }
 
 /* AIML Q&A Chat Panel */
@@ -4039,23 +4071,27 @@ const WIDGET_CSS = `
   display: none;
   flex-direction: column;
   background: #ffffff;
-  color: #181715;
+  color: #0d1322;
   border-radius: 18px;
-  border: 1px solid rgba(20, 24, 36, 0.12);
-  box-shadow: 0 16px 42px rgba(12, 16, 28, 0.22);
+  border: 1px solid rgba(13, 19, 34, 0.12);
+  box-shadow: 0 18px 44px -10px rgba(13, 19, 34, 0.34);
   overflow: hidden;
 }
 .bc-chat.open {
   display: flex;
+  animation: bcChatIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes bcChatIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
 }
 .bc-chat-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 11px 14px;
-  background: #141925;
-  color: #f8fafc;
+  padding: 11px 12px 11px 14px;
+  background: #0d1322;
+  color: #f4f7ff;
 }
 .bc-chat-title {
   display: flex;
@@ -4070,8 +4106,8 @@ const WIDGET_CSS = `
   text-overflow: ellipsis;
 }
 .bc-chat-title span {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 11.5px;
+  color: #8fa0c2;
 }
 .bc-chat-close {
   appearance: none;
@@ -4080,6 +4116,7 @@ const WIDGET_CSS = `
   color: #cbd5e1;
   width: 28px;
   height: 28px;
+  flex: none;
   border-radius: 50%;
   cursor: pointer;
   font-size: 15px;
@@ -4091,15 +4128,21 @@ const WIDGET_CSS = `
   background: rgba(255,255,255,0.2);
   color: #ffffff;
 }
+.bc-chat-head,
+.bc-chips,
+.bc-form {
+  flex: none;
+}
 .bc-messages {
-  flex: 1;
+  /* The log is the only part that shrinks, so the input row is never clipped in short layouts. */
+  flex: 1 1 auto;
   overflow-y: auto;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #f7f6f2;
-  min-height: 150px;
+  background: #f3f5f9;
+  min-height: 84px;
 }
 .bc-msg {
   max-width: 86%;
@@ -4107,18 +4150,18 @@ const WIDGET_CSS = `
   border-radius: 13px;
   font-size: 13.2px;
   line-height: 1.45;
-  word-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 .bc-msg.bot {
   align-self: flex-start;
   background: #ffffff;
-  color: #181715;
-  border: 1px solid #e2dfd7;
+  color: #0d1322;
+  border: 1px solid #dbe1ec;
   border-bottom-left-radius: 4px;
 }
 .bc-msg.user {
   align-self: flex-end;
-  background: #1764d8;
+  background: #1a5fe6;
   color: #ffffff;
   border-bottom-right-radius: 4px;
 }
@@ -4127,17 +4170,17 @@ const WIDGET_CSS = `
   flex-wrap: wrap;
   gap: 5px;
   padding: 7px 10px;
-  background: #f7f6f2;
-  border-top: 1px solid #e8e5dd;
+  background: #f3f5f9;
+  border-top: 1px solid #e3e8f0;
 }
 .bc-chips:empty {
   display: none;
 }
 .bc-chip {
   appearance: none;
-  border: 1px solid #d5d0c5;
+  border: 1px solid #c8d0df;
   background: #ffffff;
-  color: #2c2a26;
+  color: #2a3348;
   padding: 4px 10px;
   border-radius: 999px;
   font: inherit;
@@ -4147,9 +4190,9 @@ const WIDGET_CSS = `
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 .bc-chip:hover {
-  background: #eef4ff;
-  border-color: #1764d8;
-  color: #1764d8;
+  background: #edf3ff;
+  border-color: #1a5fe6;
+  color: #1a5fe6;
 }
 .bc-form {
   display: flex;
@@ -4157,28 +4200,29 @@ const WIDGET_CSS = `
   gap: 6px;
   padding: 8px 10px;
   background: #ffffff;
-  border-top: 1px solid #e5e2da;
+  border-top: 1px solid #e3e8f0;
 }
 .bc-input {
   flex: 1;
   min-width: 0;
-  border: 1px solid #d6d3c9;
+  border: 1px solid #c8d0df;
   border-radius: 999px;
   padding: 8px 13px;
   font: inherit;
-  font-size: 16px; /* Prevents iOS Safari zoom on focus! */
-  background: #faf9f6;
-  color: #181715;
+  font-size: 16px; /* stops iOS Safari zooming the page on focus */
+  background: #f7f9fc;
+  color: #0d1322;
   outline: none;
 }
 .bc-input:focus {
-  border-color: #1764d8;
+  border-color: #1a5fe6;
   background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(26, 95, 230, 0.16);
 }
 .bc-send {
   appearance: none;
   border: none;
-  background: #1764d8;
+  background: #1a5fe6;
   color: #ffffff;
   width: 36px;
   height: 36px;
@@ -4192,7 +4236,11 @@ const WIDGET_CSS = `
   flex-shrink: 0;
 }
 .bc-send:hover {
-  background: #1253b5;
+  background: #124bc0;
+}
+.bc-send .bc-ic {
+  width: 17px;
+  height: 17px;
 }
 
 /* Mobile Responsive Layout (Viewport <= 640px OR Narrow Preview Container): Keep Speaking Avatar Visible Above Chat! */
@@ -4231,7 +4279,7 @@ const WIDGET_CSS = `
 .bc-root.is-narrow-host .bc-chat {
   width: 100%;
   max-width: 100%;
-  max-height: 300px;
+  max-height: 340px;
 }
 .bc-root.is-narrow-host .bc-btn {
   min-height: 34px;
@@ -4283,7 +4331,25 @@ const WIDGET_CSS = `
     padding: 0 10px;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 `;
+
+// Inline line icons (a Shadow DOM widget can't reference the host page's icon sprite).
+const ICONS = {
+  play: '<svg class="bc-ic solid" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4a.6.6 0 0 0 .92.5l11.3-7.2a.6.6 0 0 0 0-1L8.42 4.3a.6.6 0 0 0-.92.5z"/></svg>',
+  stop: '<svg class="bc-ic solid" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.2"/></svg>',
+  chat: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>',
+  volume: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.8 5.2a9.5 9.5 0 0 1 0 13.6"/></svg>',
+  muted: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg>',
+  minus: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>',
+  close: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  send: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></svg>',
+};
 
 const SIZE_MAP = {
   compact: { w: 136, h: 166, orb: 126 },
@@ -4347,41 +4413,41 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   rootEl.style.setProperty("--bc-h", `${dims.h}px`);
   rootEl.style.setProperty("--bc-orb", `${dims.orb}px`);
 
-  const shapeClass = config.avatar.stageShape === "circle" ? "shape-circle" : "";
-
+  // Static markup only: names and other configured text are set with textContent / setAttribute
+  // further down, so a bot called `Tom & "Jerry"` or `<b>` can never break or inject markup.
   rootEl.innerHTML = `
-    <button type="button" class="bc-minimized-pill" part="pill" title="Open ${config.name}">
+    <button type="button" class="bc-minimized-pill" part="pill">
       <span class="bc-pill-dot"></span>
-      <span class="bc-pill-label">${config.name}</span>
+      <span class="bc-pill-label"></span>
     </button>
     <div class="bc-companion-row">
-      <section class="bc-chat" aria-label="Chat with ${config.name}">
+      <section class="bc-chat">
         <header class="bc-chat-head">
           <div class="bc-chat-title">
             <strong class="bc-head-name"></strong>
-            <span class="bc-head-status">Ready · Local WebAssembly</span>
+            <span class="bc-head-status">Ready</span>
           </div>
-          <button type="button" class="bc-chat-close" title="Close chat" aria-label="Close chat">×</button>
+          <button type="button" class="bc-chat-close" title="Close chat" aria-label="Close chat">${ICONS.close}</button>
         </header>
         <div class="bc-messages" role="log" aria-live="polite"></div>
         <div class="bc-chips"></div>
         <form class="bc-form">
-          <input type="text" class="bc-input" placeholder="Ask a question…" autocomplete="off" />
-          <button type="submit" class="bc-send" title="Send" aria-label="Send">➤</button>
+          <input type="text" class="bc-input" placeholder="Ask a question…" autocomplete="off" aria-label="Your question" />
+          <button type="submit" class="bc-send" title="Send" aria-label="Send">${ICONS.send}</button>
         </form>
       </section>
 
       <div class="bc-stage-wrap">
-        <div class="bc-caption" aria-live="polite"></div>
-        <div class="bc-stage-card ${shapeClass}" title="Click to hear ${config.name}">
+        <div class="bc-caption" aria-live="off"></div>
+        <div class="bc-stage-card" role="button" tabindex="0">
           <canvas width="360" height="440"></canvas>
-          <div class="bc-unmute-prompt" hidden>🔊 Tap to hear</div>
+          <div class="bc-unmute-prompt" hidden>Tap to hear</div>
         </div>
         <div class="bc-controls">
-          <button type="button" class="bc-btn bc-speak-btn" title="Speak greeting">▶ Speak</button>
-          <button type="button" class="bc-btn accent bc-ask-btn" title="Ask a question">💬 Ask</button>
-          <button type="button" class="bc-btn bc-mute-btn" title="Mute / Unmute">🔊</button>
-          <button type="button" class="bc-btn bc-min-btn" title="Minimize">—</button>
+          <button type="button" class="bc-btn bc-speak-btn" title="Speak the greeting">${ICONS.play}<span>Speak</span></button>
+          <button type="button" class="bc-btn accent bc-ask-btn" title="Ask a question">${ICONS.chat}<span>Ask</span></button>
+          <button type="button" class="bc-btn bc-mute-btn" title="Mute" aria-label="Mute" aria-pressed="false">${ICONS.volume}</button>
+          <button type="button" class="bc-btn bc-min-btn" title="Minimize" aria-label="Minimize">${ICONS.minus}</button>
         </div>
       </div>
     </div>
@@ -4407,7 +4473,28 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   const minPill = rootEl.querySelector(".bc-minimized-pill");
   const pillLabel = rootEl.querySelector(".bc-pill-label");
 
-  headNameEl.textContent = `${config.name} · ${config.role}`;
+  const STATUS_READY = "Ready";
+  const setSpeakBtn = (playing) => {
+    speakBtn.innerHTML = `${playing ? ICONS.stop : ICONS.play}<span>${playing ? "Stop" : "Speak"}</span>`;
+  };
+
+  /** Writes every piece of configured text into the DOM (safe for any characters). */
+  function applyIdentityText() {
+    const name = String(config.name || "Companion");
+    headNameEl.textContent = config.role ? `${name} · ${config.role}` : name;
+    pillLabel.textContent = name;
+    minPill.title = `Open ${name}`;
+    chatPanel.setAttribute("aria-label", `Chat with ${name}`);
+    stageCard.title = `Click to hear ${name}`;
+    stageCard.setAttribute("aria-label", `${name}. Play or stop the spoken greeting.`);
+  }
+  const syncStageShape = () => {
+    const circle = config.avatar.stageShape === "circle" && config.avatar.framing !== "cutout";
+    stageCard.classList.toggle("shape-circle", circle);
+  };
+  applyIdentityText();
+  syncStageShape();
+
   if (!config.chatEnabled) {
     askBtn.style.display = "none";
   } else if (config.chatStartOpen) {
@@ -4504,25 +4591,48 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     }
     isPlaying = false;
     activeSpeech = null;
-    speakBtn.textContent = "▶ Speak";
-    headStatusEl.textContent = "Online · Local WebAssembly";
+    captionKey = "";
+    setSpeakBtn(false);
+    if (ttsVoice) headStatusEl.textContent = STATUS_READY;
   }
 
+  // Word-synced captions. tts.wasm reports lowercase word timings; when the count lines up with the
+  // display text we show the original words (capitals and punctuation) instead.
+  let captionKey = "";
+  let captionLabels = [];
+  let captionFor = null;
   function showCaptionWords(speech, activeTimeSec) {
     if (!config.showCaptions || !speech || !speech.words || !speech.words.length) return;
     if (chatPanel.classList.contains("open")) {
       captionEl.classList.remove("visible");
       return;
     }
+    if (captionFor !== speech) {
+      captionFor = speech;
+      captionKey = "";
+      const tokens = String(speech.text || "").split(/\s+/).filter(Boolean);
+      captionLabels = tokens.length === speech.words.length ? tokens : speech.words.map((w) => w.word);
+    }
+    let started = 0;
+    let active = -1;
+    for (let i = 0; i < speech.words.length; i++) {
+      if (activeTimeSec >= speech.words[i].start) {
+        started = i;
+        if (activeTimeSec < speech.words[i].end) active = i;
+      } else break;
+    }
+    const key = `${started}:${active}`;
+    if (key === captionKey) return; // only touch the DOM when the spoken word changes
+    captionKey = key;
     captionEl.classList.add("visible");
     clearTimeout(captionTimer);
-    const html = speech.words
-      .map((w) => {
-        const safe = w.word.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-        return activeTimeSec >= w.start && activeTimeSec < w.end ? `<mark>${safe}</mark>` : safe;
-      })
-      .join(" ");
-    captionEl.innerHTML = html;
+    captionEl.replaceChildren();
+    captionLabels.forEach((label, i) => {
+      const el = document.createElement(i === active ? "mark" : "span");
+      if (i !== active && (i < started || (i === started && active === -1))) el.className = "said";
+      el.textContent = label;
+      captionEl.append(el, " ");
+    });
   }
 
   const enginePromise = loadTtsEngine({
@@ -4539,7 +4649,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     })
     .catch((err) => {
       console.error("[bot.computer] TTS engine load error:", err);
-      headStatusEl.textContent = "Text-only mode";
+      headStatusEl.textContent = "Text only (voice unavailable)";
       return null;
     });
 
@@ -4580,15 +4690,16 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     activeSpeech = speech;
     playStartedAt = audioCtx.currentTime + 0.015;
     isPlaying = true;
-    speakBtn.textContent = "■ Stop";
-    headStatusEl.textContent = "Speaking · 200 Hz Lip-Sync";
+    setSpeakBtn(true);
+    headStatusEl.textContent = "Speaking";
 
     sourceNode.start(playStartedAt);
     sourceNode.onended = () => {
       isPlaying = false;
       activeSpeech = null;
-      speakBtn.textContent = "▶ Speak";
-      headStatusEl.textContent = "Online · Local WebAssembly";
+      captionKey = "";
+      setSpeakBtn(false);
+      headStatusEl.textContent = STATUS_READY;
       captionTimer = setTimeout(() => captionEl.classList.remove("visible"), 1600);
     };
   }
@@ -4610,18 +4721,23 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     await speakText(res.speechText, { emote: res.emote || "" });
   }
 
-  // Wire UI Events
-  stageCard.onclick = () => {
-    if (isPlaying) {
-      stopSpeech();
-    } else {
-      speakText(config.greeting, { emote: "wave" });
-    }
-  };
-
-  speakBtn.onclick = () => {
+  // Wire UI events
+  const toggleGreeting = () => {
     if (isPlaying) stopSpeech();
     else speakText(config.greeting, { emote: "wave" });
+  };
+  stageCard.onclick = toggleGreeting;
+  stageCard.onkeydown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleGreeting();
+    }
+  };
+  speakBtn.onclick = toggleGreeting;
+
+  const closeChat = () => {
+    chatPanel.classList.remove("open");
+    rootEl.classList.remove("chat-is-open");
   };
 
   askBtn.onclick = () => {
@@ -4632,18 +4748,24 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       if (!messagesEl.children.length) {
         appendChatMessage("bot", stripSpeechTags(config.greeting));
       }
-      setTimeout(() => inputEl.focus(), 60);
+      setTimeout(() => inputEl.focus({ preventScroll: true }), 60);
     }
   };
 
-  closeChatBtn.onclick = () => {
-    chatPanel.classList.remove("open");
-    rootEl.classList.remove("chat-is-open");
-  };
+  closeChatBtn.onclick = closeChat;
+  chatPanel.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeChat();
+      askBtn.focus();
+    }
+  });
 
   muteBtn.onclick = () => {
     isMuted = !isMuted;
-    muteBtn.textContent = isMuted ? "🔇" : "🔊";
+    muteBtn.innerHTML = isMuted ? ICONS.muted : ICONS.volume;
+    muteBtn.title = isMuted ? "Unmute" : "Mute";
+    muteBtn.setAttribute("aria-label", muteBtn.title);
+    muteBtn.setAttribute("aria-pressed", String(isMuted));
     if (isMuted) stopSpeech();
   };
 
@@ -4741,13 +4863,17 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       }
       if (patch.avatar) {
         config.avatar = { ...config.avatar, ...patch.avatar };
-        stageCard.classList.toggle("shape-circle", config.avatar.stageShape === "circle");
+        syncStageShape();
       }
-      if (patch.voice && ttsVoice) {
-        config.voice = { ...config.voice, ...patch.voice };
-        try {
-          ttsVoice.configure(patch.voice);
-        } catch {}
+      if (patch.voice) {
+        // Keep the config current even before tts.wasm has loaded, so the voice that is
+        // created later starts from the latest settings rather than the mount-time ones.
+        config.voice = { ...(typeof config.voice === "object" ? config.voice : {}), ...patch.voice };
+        if (ttsVoice) {
+          try {
+            ttsVoice.configure(patch.voice);
+          } catch {}
+        }
       }
       if (patch.aimlXml !== undefined) {
         config.aimlXml = patch.aimlXml;
@@ -4757,8 +4883,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
           renderChips(aiml.quickChips.map((c) => ({ label: c, query: c })));
         } catch {}
       }
-      headNameEl.textContent = `${config.name} · ${config.role}`;
-      pillLabel.textContent = config.name;
+      applyIdentityText();
     },
     destroy() {
       destroyed = true;

@@ -3,109 +3,254 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>bot.computer · Speaking Website Companions &amp; AIML Avatars in WebAssembly</title>
-  <meta name="description" content="Design customizable speaking website avatars, sculpt face and body proportions, add an AIML XML Q&A chatbot brain, and download a 100% self-contained WebAssembly script powered by tts.wasm.">
-  <link rel="canonical" href="https://bot.computer">
-  <meta property="og:url" content="https://bot.computer">
+  <title>Animated talking avatars for your website | bot.computer</title>
+  <meta name="description" content="Make an animated talking avatar for your website. Sculpt it, give it a voice and an AIML chat brain, and embed it with one script. No servers or API keys.">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+  <meta name="author" content="f2i.com">
+  <meta name="color-scheme" content="light dark">
+  <link rel="canonical" href="https://bot.computer/">
+
+  <!-- Link previews (Open Graph is read by Facebook, LinkedIn, Slack, Discord, WhatsApp, iMessage) -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://bot.computer/">
   <meta property="og:site_name" content="bot.computer">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%231764d8'/%3E%3Ccircle cx='11.5' cy='13.5' r='2.2' fill='%23fff'/%3E%3Ccircle cx='20.5' cy='13.5' r='2.2' fill='%23fff'/%3E%3Cpath d='M10.5 20.2c2.8 2.8 8.2 2.8 11 0' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:title" content="bot.computer: animated talking avatars for your website">
+  <meta property="og:description" content="Sculpt a character, give it a voice and an AIML chat brain, and embed it on any site with one script. Runs entirely in the browser.">
+  <meta property="og:image" content="https://bot.computer/assets/share-card.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="A cartoon website companion saying “Hi! Welcome to our website!” next to the headline “Animated speaking companions for your website”.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="bot.computer: animated talking avatars for your website">
+  <meta name="twitter:description" content="Sculpt a character, give it a voice and an AIML chat brain, and embed it on any site with one script. Runs entirely in the browser.">
+  <meta name="twitter:image" content="https://bot.computer/assets/share-card.jpg">
+  <meta name="twitter:image:alt" content="A cartoon website companion saying “Hi! Welcome to our website!” next to the headline “Animated speaking companions for your website”.">
+
+  <meta name="theme-color" content="#f3f5f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#090d18" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="./favicon.ico" sizes="32x32">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <script>
+    // Apply the saved theme before first paint so the page never flashes the wrong palette.
+    try {
+      var savedTheme = localStorage.getItem("bc-theme");
+      if (savedTheme === "light" || savedTheme === "dark") document.documentElement.setAttribute("data-theme", savedTheme);
+    } catch (e) {}
+  </script>
+  <link rel="preload" href="./vendor/fonts/bricolage-grotesque-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./styles.css">
+
+  <!-- Fetch the app's modules and the voice engine in parallel instead of one import at a time. -->
+  <link rel="modulepreload" href="./src/app.js">
+  <link rel="modulepreload" href="./src/avatar-renderer.js">
+  <link rel="modulepreload" href="./src/aiml-engine.js">
+  <link rel="modulepreload" href="./src/embed-widget-core.js">
+  <link rel="modulepreload" href="./src/embed-builder.js">
+  <link rel="modulepreload" href="./vendor/tts/tts.js">
+  <link rel="preload" href="./vendor/tts/tts.wasm" as="fetch" type="application/wasm" crossorigin>
+
+  <!-- Structured data so search engines can describe the site and the app accurately. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://bot.computer/#website",
+        "url": "https://bot.computer/",
+        "name": "bot.computer",
+        "description": "A studio for making animated talking avatars and AIML chatbots that run entirely in the browser.",
+        "inLanguage": "en",
+        "publisher": { "@id": "https://bot.computer/#publisher" }
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://bot.computer/#publisher",
+        "name": "f2i.com",
+        "url": "https://f2i.com/"
+      },
+      {
+        "@type": "WebApplication",
+        "@id": "https://bot.computer/#app",
+        "name": "bot.computer",
+        "url": "https://bot.computer/",
+        "description": "Design an animated talking avatar for your website, sculpt its face and body, give it a voice and an AIML question-and-answer brain, and export it as one self-contained script.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript, WebAssembly and Web Audio.",
+        "inLanguage": "en",
+        "image": "https://bot.computer/assets/share-card.jpg",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "Sculpt the avatar's face and body by dragging handles on the canvas",
+          "24 kHz speech synthesized in the browser from a physical vocal-tract model",
+          "200 Hz lip sync driven by the synthesizer's articulator data",
+          "AIML 2.0 question-and-answer chatbot with quick-reply chips",
+          "Export as a single self-contained JavaScript file that works offline",
+          "Embeddable companion widget isolated in Shadow DOM"
+        ],
+        "publisher": { "@id": "https://bot.computer/#publisher" }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
-  <!-- Sticky Top Navigation -->
+  <!-- Icon sprite. Line icons adapted from Lucide (ISC License, lucide.dev). -->
+  <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 4.8v14.4a.6.6 0 0 0 .92.5l11.3-7.2a.6.6 0 0 0 0-1L8.42 4.3a.6.6 0 0 0-.92.5z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.2" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></symbol>
+      <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8.5 8.5h.01"/><path d="M15.5 15.5h.01"/><path d="M12 12h.01"/><path d="M15.5 8.5h.01"/><path d="M8.5 15.5h.01"/></symbol>
+      <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5 5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5 5.5 5.5 0 0 0 9.5 20H13"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect width="13" height="13" x="8" y="8" rx="2.2"/><path d="M4.5 16A2 2 0 0 1 3 14V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 1.5"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-desktop" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect width="13" height="20" x="5.5" y="2" rx="2.5"/><path d="M12 18h.01"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+      <symbol id="i-voice" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9.5 21v-8h5v8"/></symbol>
+      <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+      <symbol id="i-body" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+      <symbol id="i-face" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9.5h.01"/><path d="M15 9.5h.01"/></symbol>
+      <symbol id="i-outfit" viewBox="0 0 24 24"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></symbol>
+      <symbol id="i-shrink" viewBox="0 0 24 24"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/><path d="m3 21 7-7"/></symbol>
+      <symbol id="i-sculpt" viewBox="0 0 24 24"><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="5" r="2.2"/><path d="M5 16.8C5 10 10 5 16.8 5"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></symbol>
+    </defs>
+  </svg>
+
+  <a href="#studioSection" class="skip-link">Skip to the studio</a>
+
   <header class="site-header">
     <div class="header-inner">
-      <a href="#top" class="brand-link">
-        <span class="brand-orb" aria-hidden="true"></span>
-        <span class="brand-name">bot<span class="brand-tld">.computer</span></span>
-        <span class="sister-pill" title="Powered by tts.wasm physical vocal-tract synthesis">tts.wasm · 200 Hz</span>
+      <a href="#top" class="brand-link" aria-label="bot.computer home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect class="bm-body" x="2" y="3" width="28" height="20" rx="6.2"/>
+          <rect class="bm-body" x="13.7" y="22.5" width="4.6" height="3.6"/>
+          <rect class="bm-body" x="8.6" y="25.7" width="14.8" height="3.1" rx="1.55"/>
+          <rect class="bm-eye" x="9.2" y="7.4" width="2.9" height="4.6" rx="1.45"/>
+          <rect class="bm-eye" x="19.9" y="7.4" width="2.9" height="4.6" rx="1.45"/>
+          <rect class="bm-voice" x="11.1" y="15.9" width="2" height="2.6" rx="1"/>
+          <rect class="bm-voice" x="15" y="14.6" width="2" height="5.2" rx="1"/>
+          <rect class="bm-voice" x="18.9" y="15.4" width="2" height="3.6" rx="1"/>
+        </svg>
+        <span class="brand-name">bot<span class="brand-dot">.</span><span class="brand-tld">computer</span></span>
       </a>
 
       <nav class="main-nav" aria-label="Primary navigation">
-        <a href="#top" class="nav-link">Overview</a>
-        <a href="#studioSection" class="nav-link">Bot Studio</a>
-        <a href="#studioSection" data-jump-tab="tabChat" class="nav-link">AIML Brain</a>
-        <a href="#embedSection" class="nav-link">Live Preview &amp; Embed</a>
+        <a href="#top" class="nav-link" data-spy="top">Overview</a>
+        <a href="#studioSection" class="nav-link" data-spy="studio">Studio</a>
+        <a href="#studioSection" data-jump-tab="tabChat" class="nav-link" data-spy="chat">Chat brain</a>
+        <a href="#embedSection" class="nav-link" data-spy="embed">Preview and export</a>
+        <a href="#faqSection" class="nav-link" data-spy="faq">FAQ</a>
       </nav>
 
       <div class="header-actions">
-        <button type="button" id="themeToggleBtn" class="btn sm ghost-border" title="Cycle Auto / Light / Dark theme">Theme: Auto</button>
-        <button type="button" id="headerExportBtn" class="btn sm primary" title="Download 100% Self-Contained Bot .JS">⬇ Export .JS</button>
+        <button type="button" id="themeToggleBtn" class="btn sm icon-btn" title="Theme: match system" aria-label="Theme: match system. Click to switch.">
+          <svg class="ic"><use href="#i-auto"/></svg>
+        </button>
+        <button type="button" id="headerExportBtn" class="btn sm primary" title="Download your bot as one self-contained .js file">
+          <svg class="ic"><use href="#i-download"/></svg><span class="btn-label">Export .js</span>
+        </button>
       </div>
     </div>
   </header>
 
+  <noscript>
+    <p class="noscript-note">The bot.computer studio needs JavaScript and WebAssembly. Turn JavaScript on to design, hear and preview your companion.</p>
+  </noscript>
+
   <main id="top" class="page-wrap">
     <!-- ================================================================== -->
-    <!-- 1. LANDING PAGE HERO & INTERACTIVE SHOWCASE                        -->
+    <!-- 1. HERO AND LIVE SHOWCASE                                          -->
     <!-- ================================================================== -->
     <section class="hero-section" aria-label="Introduction">
       <div class="hero-copy">
-        <div class="eyebrow-row">
-          <span class="badge accent-badge">Pure HTML · CSS · JS · WebAssembly</span>
-          <span class="badge">Zero Cloud APIs · 100% Self-Contained</span>
-        </div>
-
-        <h1 class="hero-title">
-          Lifelike speaking companions for your website — <span class="title-highlight">sculpted by you.</span>
-        </h1>
+        <h1 class="hero-title">Animated speaking companions for your website, sculpted by you.</h1>
 
         <p class="hero-lead">
-          Inspired by classic SitePal web hosts and rebuilt from first principles. Shape your avatar’s face and body directly on canvas, drive <strong>200 Hz vocal-tract lip sync</strong> from <code>tts.wasm</code>, attach an optional <strong>AIML XML Q&amp;A chatbot</strong>, and embed everything as a single local JavaScript file.
+          Inspired by classic SitePal web hosts and rebuilt from first principles. Shape your avatar’s face and body right on the canvas, drive <strong>200&nbsp;Hz vocal-tract lip sync</strong> from <code>tts.wasm</code>, add an <strong>AIML Q&amp;A chatbot</strong>, and embed the whole thing as one JavaScript file.
         </p>
 
         <div class="hero-cta-row">
-          <a href="#studioSection" class="btn lg primary">✦ Customize Your Bot</a>
-          <button type="button" id="heroSpeakBtn" class="btn lg">▶ Hear Live Greeting</button>
-          <a href="./embed-demo.html" target="_blank" rel="noopener" class="btn lg subtle">External Site Demo ↗</a>
+          <a href="#studioSection" class="btn lg primary"><svg class="ic"><use href="#i-sculpt"/></svg>Design your bot</a>
+          <button type="button" id="heroSpeakBtn" class="btn lg"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Hear the greeting</span></button>
+          <a href="./embed-demo.html" target="_blank" rel="noopener" class="btn lg subtle"><span class="lbl-long">See it on a sample site</span><span class="lbl-short">Sample site</span><svg class="ic"><use href="#i-external"/></svg></a>
         </div>
 
-        <div class="hero-metrics">
-          <div class="metric-item">
-            <strong>200 fps</strong>
-            <span>Jaw, tongue &amp; lip visemes</span>
+        <p class="hero-note">Runs entirely in the browser. No servers, no API keys, no tracking.</p>
+
+        <dl class="hero-specs">
+          <div class="spec-item">
+            <dt>200 Hz</dt>
+            <dd>Jaw, tongue and lip positions every 5&nbsp;ms</dd>
           </div>
-          <div class="metric-item">
-            <strong>24 kHz</strong>
-            <span>Physical vocal-tract TTS</span>
+          <div class="spec-item">
+            <dt>24 kHz</dt>
+            <dd>Speech from a physical vocal-tract model</dd>
           </div>
-          <div class="metric-item">
-            <strong>AIML 2.0</strong>
-            <span>Embedded XML Q&amp;A brain</span>
+          <div class="spec-item">
+            <dt>AIML 2.0</dt>
+            <dd>A Q&amp;A brain you edit as XML</dd>
           </div>
-          <div class="metric-item">
-            <strong>1 File</strong>
-            <span>Offline self-contained <code>.js</code></span>
+          <div class="spec-item">
+            <dt>1 file</dt>
+            <dd>Avatar, voice and brain in a single <code>.js</code></dd>
           </div>
-        </div>
+        </dl>
       </div>
 
-      <!-- Interactive Hero Companion Card -->
+      <!-- Live companion card -->
       <div class="hero-showcase-card">
         <div class="showcase-top">
-          <div class="persona-pills" id="heroPersonaPills" role="group" aria-label="Try companion personas"></div>
-          <span class="live-status-pill" id="heroEngineBadge">Loading tts.wasm…</span>
+          <div class="persona-pills" id="heroPersonaPills" role="group" aria-label="Try a companion"></div>
+          <span class="live-status-pill is-loading" id="heroEngineBadge" role="status">Loading voice…</span>
         </div>
 
         <div class="hero-stage-grid">
-          <div class="hero-avatar-box" id="heroAvatarBox" title="Move cursor to test eye tracking · Click to speak!">
-            <canvas id="heroCanvas" width="420" height="480"></canvas>
-            <div class="hero-caption-bubble" id="heroCaptionBubble" hidden></div>
-            <div class="hero-stage-hint">Move cursor to test gaze · Tap avatar to speak</div>
+          <div class="hero-stage">
+            <div class="hero-avatar-box" id="heroAvatarBox" role="button" tabindex="0" aria-label="Play or stop the spoken greeting">
+              <canvas id="heroCanvas" width="420" height="480"></canvas>
+              <div class="hero-caption-bubble" id="heroCaptionBubble" hidden></div>
+            </div>
+            <div class="scope hero-scope" aria-hidden="true">
+              <canvas id="heroScopeCanvas" width="300" height="56"></canvas>
+              <div class="scope-side">
+                <span class="scope-ipa" id="heroIpaBadge">· · ·</span>
+                <span class="scope-hz" id="heroF0Badge">tap to speak</span>
+              </div>
+            </div>
           </div>
 
           <div class="hero-mini-chat">
             <div class="mini-chat-head">
               <div>
                 <strong id="heroBotName">Aria</strong>
-                <span id="heroBotRole">Website Concierge · AIML Q&amp;A</span>
+                <span id="heroBotRole">Website Concierge</span>
               </div>
-              <button type="button" id="heroWaveBtn" class="btn xs" title="Trigger wave gesture">👋 Wave</button>
+              <button type="button" id="heroWaveBtn" class="btn xs">Wave</button>
             </div>
             <div class="mini-chat-log" id="heroChatLog" aria-live="polite"></div>
             <div class="mini-chat-chips" id="heroQuickChips"></div>
             <form id="heroChatForm" class="mini-chat-form">
-              <input type="text" id="heroChatInput" placeholder="Ask Aria a question…" autocomplete="off">
+              <input type="text" id="heroChatInput" placeholder="Ask Aria a question…" autocomplete="off" aria-label="Ask the companion a question">
               <button type="submit" class="btn sm primary">Ask</button>
             </form>
           </div>
@@ -113,272 +258,282 @@
       </div>
     </section>
 
-    <!-- Feature Bento Strip -->
-    <section class="features-grid" aria-label="Core capabilities">
+    <!-- What it does -->
+    <section class="features-grid" aria-labelledby="featuresHeading">
+      <h2 id="featuresHeading" class="sr-only">What bot.computer does</h2>
       <article class="feature-card">
-        <div class="feat-icon">✦</div>
-        <h3>Direct Body &amp; Face Sculpting</h3>
-        <p>Grab interactive handles right on your companion’s shoulders, chest, waist, neck, jaw, eyes, and lips — or dial in exact proportions with studio sliders.</p>
+        <div class="feat-icon"><svg class="ic"><use href="#i-sculpt"/></svg></div>
+        <h3>Sculpt the face and body directly</h3>
+        <p>Drag the handles on your companion’s shoulders, chest, waist, neck, jaw, eyes and lips, or dial in exact proportions with the sliders.</p>
       </article>
       <article class="feature-card">
-        <div class="feat-icon">🎙</div>
-        <h3>Physical Vocal-Tract Lip Sync</h3>
-        <p>Powered by <code>tts.wasm</code>: real-time 24 kHz speech synthesis outputs 9 articulatory parameters every 5 ms for authentic bilabial, labiodental, and vowel shapes.</p>
+        <div class="feat-icon"><svg class="ic"><use href="#i-voice"/></svg></div>
+        <h3>Lip sync from a physical vocal tract</h3>
+        <p><code>tts.wasm</code> synthesizes 24&nbsp;kHz speech and reports nine articulator positions every 5&nbsp;ms, so bilabial, labiodental and vowel shapes are the real ones.</p>
       </article>
       <article class="feature-card">
-        <div class="feat-icon">🧠</div>
-        <h3>AIML XML Pattern-Matching AI</h3>
-        <p>Turn your avatar into an interactive Q&amp;A guide defined by standard AIML XML — supporting wildcards, <code>&lt;srai&gt;</code>, <code>&lt;random&gt;</code>, memory variables, and quick chips.</p>
+        <div class="feat-icon"><svg class="ic"><use href="#i-chat"/></svg></div>
+        <h3>A chat brain written in AIML</h3>
+        <p>Turn the avatar into a Q&amp;A guide with standard AIML XML: wildcards, <code>&lt;srai&gt;</code>, <code>&lt;random&gt;</code>, memory variables and quick-reply chips.</p>
       </article>
       <article class="feature-card">
-        <div class="feat-icon">📦</div>
-        <h3>Self-Contained Local Script</h3>
-        <p>Download a single standalone <code>.js</code> bundle containing your sculpted avatar, AIML XML brain, and compressed <code>tts.wasm</code> — zero external servers or fees.</p>
+        <div class="feat-icon"><svg class="ic"><use href="#i-code"/></svg></div>
+        <h3>One self-contained script</h3>
+        <p>Download a single <code>.js</code> file holding your avatar, its AIML brain and a compressed <code>tts.wasm</code>. No external servers, no fees.</p>
       </article>
     </section>
 
     <!-- ================================================================== -->
-    <!-- 2. BOT DESIGNER & BODY SCULPTOR STUDIO                             -->
+    <!-- 2. STUDIO                                                          -->
     <!-- ================================================================== -->
-    <section id="studioSection" class="studio-section" aria-label="Bot Designer Studio">
+    <section id="studioSection" class="studio-section" aria-labelledby="studioHeading">
       <div class="section-header">
         <div>
-          <span class="section-kicker">Interactive Character &amp; Voice Workshop</span>
-          <h2>Bot Designer &amp; Body Sculptor</h2>
+          <h2 id="studioHeading">Design your bot</h2>
+          <p class="section-sub">Pick a starting character, then shape it on the canvas or with the sliders. <span class="autosave-note" id="autosaveNote">Changes are saved in this browser.</span></p>
         </div>
         <div class="section-header-actions">
-          <button type="button" id="randomizeAllBtn" class="btn sm">🎲 Randomize Bot &amp; Voice</button>
-          <button type="button" id="savePresetJsonBtn" class="btn sm" title="Export full bot configuration as JSON">↓ Save Config JSON</button>
-          <label class="btn sm file-btn" title="Load a saved bot configuration JSON">
-            ↑ Load JSON
-            <input type="file" id="loadPresetJsonInput" accept=".json,application/json" hidden>
-          </label>
+          <button type="button" id="randomizeAllBtn" class="btn sm"><svg class="ic"><use href="#i-dice"/></svg>Randomize</button>
+          <button type="button" id="savePresetJsonBtn" class="btn sm" title="Save the full bot configuration as a JSON file"><svg class="ic"><use href="#i-download"/></svg>Save config</button>
+          <button type="button" id="loadPresetJsonBtn" class="btn sm" title="Load a saved bot configuration JSON file"><svg class="ic"><use href="#i-upload"/></svg>Load config</button>
+          <input type="file" id="loadPresetJsonInput" accept=".json,application/json" hidden>
+          <button type="button" id="startOverBtn" class="btn sm ghost" title="Discard your changes and go back to Aria"><svg class="ic"><use href="#i-reset"/></svg>Start over</button>
         </div>
       </div>
 
-      <!-- Character Archetype Strip -->
-      <div class="archetype-strip" id="studioPresetStrip" aria-label="Starter character templates"></div>
+      <!-- Starter characters -->
+      <div class="archetype-strip" id="studioPresetStrip" role="group" aria-label="Starter characters"></div>
 
       <div class="studio-workspace" id="studioWorkspace">
-        <!-- LEFT: Sticky Live Stage + Sculpt Canvas + Audition Deck -->
+        <!-- LEFT: sticky stage, voice scope and speech test -->
         <div class="stage-column" id="stageColumn">
           <div class="panel stage-panel">
             <div class="stage-toolbar">
               <div class="seg" id="framingSeg" role="group" aria-label="Camera framing">
                 <button type="button" data-framing="bust">Bust</button>
-                <button type="button" data-framing="half" class="active">Half-Body</button>
-                <button type="button" data-framing="full">Full Torso</button>
+                <button type="button" data-framing="half" class="active"><span>Half<span class="seg-extra"> body</span></span></button>
+                <button type="button" data-framing="full"><span>Full<span class="seg-extra"> torso</span></span></button>
                 <button type="button" data-framing="cutout">Cutout</button>
               </div>
 
               <div class="stage-toolbar-right">
-                <button type="button" id="toggleSculptBtn" class="btn xs active-pill" title="Show draggable handles on the body and face to sculpt directly">✦ Sculpt: ON</button>
-                <button type="button" id="resetMorphsBtn" class="btn xs" title="Reset face &amp; body proportions to default">↺ Reset</button>
-                <button type="button" id="mobileCompactStageBtn" class="btn xs mobile-only-btn" title="Toggle full sculpt stage vs docked mobile preview">⤢ Full Stage</button>
+                <button type="button" id="undoBtn" class="btn xs icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><svg class="ic"><use href="#i-undo"/></svg></button>
+                <button type="button" id="redoBtn" class="btn xs icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><svg class="ic"><use href="#i-redo"/></svg></button>
+                <button type="button" id="toggleSculptBtn" class="btn xs active-pill" aria-pressed="true" title="Show or hide the drag handles on the body and face"><svg class="ic"><use href="#i-sculpt"/></svg><span class="btn-label">Handles</span></button>
+                <button type="button" id="resetMorphsBtn" class="btn xs" title="Reset face and body proportions to the defaults"><svg class="ic"><use href="#i-reset"/></svg><span class="btn-label">Reset</span></button>
+                <button type="button" id="mobileCompactStageBtn" class="btn xs mobile-only-btn" title="Make the stage taller or dock it again"><svg class="ic"><use href="#i-expand"/></svg><span class="btn-label">Taller</span></button>
               </div>
             </div>
 
-            <div class="designer-canvas-wrap" id="designerCanvasWrap">
-              <canvas id="designerCanvas" width="520" height="580"></canvas>
+            <div class="stage-block">
+              <div class="designer-canvas-wrap" id="designerCanvasWrap">
+                <canvas id="designerCanvas" width="520" height="580" aria-label="Avatar stage. Drag the handles to sculpt."></canvas>
 
-              <div class="stage-live-overlay">
-                <span class="live-pill" id="sculptLiveHud" hidden></span>
-                <span class="live-pill" id="liveWordBadge" hidden></span>
-                <span class="live-pill phone" id="livePhoneBadge" hidden></span>
-                <span class="live-pill f0" id="liveF0Badge" hidden></span>
+                <div class="stage-live-overlay">
+                  <span class="live-pill sculpt" id="sculptLiveHud" hidden></span>
+                  <span class="live-pill" id="liveWordBadge" hidden></span>
+                  <span class="live-pill phone" id="livePhoneBadge" hidden></span>
+                  <span class="live-pill f0" id="liveF0Badge" hidden></span>
+                </div>
+
+                <!-- Mobile quick controls while the stage is docked -->
+                <div class="mobile-stage-fab">
+                  <button type="button" id="mobileQuickSpeakBtn" class="stage-fab-btn primary"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Speak</span></button>
+                  <button type="button" id="mobileScriptToggleBtn" class="stage-fab-btn"><svg class="ic"><use href="#i-pencil"/></svg><span class="btn-label">Script</span></button>
+                </div>
+
+                <div class="sculpt-hint-bar" id="sculptHintBar">Drag any node to reshape the head, shoulders, chest or waist.</div>
               </div>
 
-              <!-- Mobile Quick Stage Controls (1-tap Speak & Script Drawer while docked!) -->
-              <div class="mobile-stage-fab">
-                <button type="button" id="mobileQuickSpeakBtn" class="stage-fab-btn primary">▶ Speak</button>
-                <button type="button" id="mobileScriptToggleBtn" class="stage-fab-btn">✎ Script</button>
-              </div>
-
-              <div class="sculpt-hint-bar" id="sculptHintBar">
-                Drag any cyan node on the head, shoulders, chest, or waist to shape directly.
+              <!-- Live articulation scope: what the vocal tract is doing right now -->
+              <div class="scope studio-scope" role="img" aria-label="Live articulation traces for jaw, tongue, lips, nasal and voicing">
+                <div class="scope-labels" aria-hidden="true">
+                  <span class="ch-jaw">Jaw</span>
+                  <span class="ch-tongue">Tongue</span>
+                  <span class="ch-lips">Lips</span>
+                  <span class="ch-nasal">Nasal</span>
+                  <span class="ch-voice">Voicing</span>
+                </div>
+                <canvas id="studioScopeCanvas" width="400" height="90"></canvas>
               </div>
             </div>
 
-            <!-- Real-time 200 Hz Articulatory Telemetry Strip -->
-            <div class="viseme-meters" aria-label="Live vocal tract articulation meters">
-              <div class="v-meter"><div class="v-track"><div class="v-fill" id="vmJaw"></div></div><span>Jaw</span></div>
-              <div class="v-meter"><div class="v-track"><div class="v-fill pink" id="vmTongue"></div></div><span>Tongue</span></div>
-              <div class="v-meter"><div class="v-track"><div class="v-fill rose" id="vmLips"></div></div><span>Lips</span></div>
-              <div class="v-meter"><div class="v-track"><div class="v-fill amber" id="vmVelum"></div></div><span>Nasal</span></div>
-              <div class="v-meter"><div class="v-track"><div class="v-fill teal" id="vmVoice"></div></div><span>Voicing</span></div>
-            </div>
-
-            <!-- Quick Audition & Expression Transport -->
+            <!-- Speech test -->
             <div class="audition-box">
-              <div class="tag-insert-bar" aria-label="Insert inline expression tags">
-                <span class="tiny-label">Tags:</span>
-                <button type="button" class="mini-tag" data-ins="[cheerful] ">😊 Cheerful</button>
-                <button type="button" class="mini-tag" data-ins="[excited, speed=1.15] ">⚡ Excited</button>
-                <button type="button" class="mini-tag" data-ins="[calm, warmth=0.8] ">🌿 Calm</button>
-                <button type="button" class="mini-tag" data-ins="[whisper] ">🤫 Whisper</button>
-                <button type="button" class="mini-tag" data-ins="[pause=280ms] ">⏸ Pause</button>
-                <button type="button" class="mini-tag" data-ins="[sing bpm=110] C4:1=Hel- E4:1=lo G4:2=there! [/sing] ">♪ Sing</button>
+              <div class="tag-insert-bar" role="group" aria-label="Insert a speech tag">
+                <span class="tiny-label">Insert tag</span>
+                <button type="button" class="mini-tag" data-ins="[cheerful] ">Cheerful</button>
+                <button type="button" class="mini-tag" data-ins="[excited, speed=1.15] ">Excited</button>
+                <button type="button" class="mini-tag" data-ins="[calm, warmth=0.8] ">Calm</button>
+                <button type="button" class="mini-tag" data-ins="[whisper] ">Whisper</button>
+                <button type="button" class="mini-tag" data-ins="[pause=280ms] ">Pause</button>
+                <button type="button" class="mini-tag" data-ins="[sing bpm=110] C4:1=Hel- E4:1=lo G4:2=there! [/sing] ">Sing</button>
               </div>
 
-              <textarea id="auditionText" rows="2" spellcheck="false">[cheerful] Hi! Welcome to our website! Move your mouse around and watch my eyes follow you, or sculpt my body right on the canvas!</textarea>
+              <textarea id="auditionText" rows="2" spellcheck="false" aria-label="Line for the bot to speak">[cheerful] Hi! Welcome to our website! Move your mouse around and watch my eyes follow you, or sculpt my body right on the canvas!</textarea>
 
               <div class="audition-actions">
-                <button type="button" id="studioSpeakBtn" class="btn primary">▶ Speak Test</button>
-                <button type="button" id="studioStopBtn" class="btn" disabled>■ Stop</button>
-                <button type="button" class="btn xs emote-btn" data-emote="wave">👋 Wave</button>
-                <button type="button" class="btn xs emote-btn" data-emote="happy">😊 Smile</button>
-                <button type="button" class="btn xs emote-btn" data-emote="wink">😉 Wink</button>
-                <button type="button" class="btn xs emote-btn" data-emote="think">🤔 Think</button>
-                <button type="button" id="downloadWavBtn" class="btn xs" title="Download 24 kHz WAV of current test line">↓ WAV</button>
+                <button type="button" id="studioSpeakBtn" class="btn primary"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Speak</span></button>
+                <button type="button" id="studioStopBtn" class="btn" disabled><svg class="ic"><use href="#i-stop"/></svg>Stop</button>
+                <div class="seg emote-seg" role="group" aria-label="Play a gesture">
+                  <button type="button" class="emote-btn" data-emote="wave">Wave</button>
+                  <button type="button" class="emote-btn" data-emote="happy">Smile</button>
+                  <button type="button" class="emote-btn" data-emote="wink">Wink</button>
+                  <button type="button" class="emote-btn" data-emote="think">Think</button>
+                </div>
+                <button type="button" id="downloadWavBtn" class="btn xs" title="Download this line as a 24 kHz WAV file"><svg class="ic"><use href="#i-download"/></svg>WAV</button>
               </div>
-              <div class="synth-perf-line" id="studioStatusLine">Ready · 24 kHz WebAssembly vocal tract</div>
+              <div class="synth-perf-line" id="studioStatusLine" role="status">Loading voice…</div>
             </div>
           </div>
         </div>
 
-        <!-- RIGHT: Tabbed Customizer Inspector -->
+        <!-- RIGHT: tabbed inspector -->
         <div class="inspector-column">
           <div class="panel inspector-panel">
-            <div class="studio-tabs" role="tablist" aria-label="Customization categories">
-              <button type="button" class="studio-tab active" data-tab="tabBody" role="tab" aria-selected="true">✦ Body &amp; Sculpt</button>
-              <button type="button" class="studio-tab" data-tab="tabFace" role="tab" aria-selected="false">😊 Face &amp; Head</button>
-              <button type="button" class="studio-tab" data-tab="tabStyle" role="tab" aria-selected="false">👔 Hair &amp; Outfit</button>
-              <button type="button" class="studio-tab" data-tab="tabVoice" role="tab" aria-selected="false">🎙 Voice (WASM)</button>
-              <button type="button" class="studio-tab" data-tab="tabChat" role="tab" aria-selected="false">🧠 Chat (AIML)</button>
+            <div class="studio-tabs" role="tablist" aria-label="What to customize">
+              <button type="button" class="studio-tab active" id="tabBtnBody" data-tab="tabBody" role="tab" aria-selected="true" aria-controls="tabBody"><svg class="ic"><use href="#i-body"/></svg>Body</button>
+              <button type="button" class="studio-tab" id="tabBtnFace" data-tab="tabFace" role="tab" aria-selected="false" aria-controls="tabFace" tabindex="-1"><svg class="ic"><use href="#i-face"/></svg>Face</button>
+              <button type="button" class="studio-tab" id="tabBtnStyle" data-tab="tabStyle" role="tab" aria-selected="false" aria-controls="tabStyle" tabindex="-1"><svg class="ic"><use href="#i-outfit"/></svg>Hair &amp; outfit</button>
+              <button type="button" class="studio-tab" id="tabBtnVoice" data-tab="tabVoice" role="tab" aria-selected="false" aria-controls="tabVoice" tabindex="-1"><svg class="ic"><use href="#i-voice"/></svg>Voice</button>
+              <button type="button" class="studio-tab" id="tabBtnChat" data-tab="tabChat" role="tab" aria-selected="false" aria-controls="tabChat" tabindex="-1"><svg class="ic"><use href="#i-chat"/></svg>Chat</button>
             </div>
 
-            <!-- TAB 1: BODY & STAGE SCULPTING -->
-            <div class="tab-content active" id="tabBody" role="tabpanel">
+            <!-- TAB 1: BODY -->
+            <div class="tab-content active" id="tabBody" role="tabpanel" aria-labelledby="tabBtnBody">
               <div class="control-block">
                 <div class="block-head">
-                  <h3>Body Silhouette Quick-Builds</h3>
-                  <span class="hint-text">Click a build, then refine any slider or drag on-canvas</span>
+                  <h3>Quick builds</h3>
+                  <span class="hint-text">Pick one, then refine with the sliders or on the canvas</span>
                 </div>
-                <div class="pill-grid" id="bodyBuildPills">
-                  <button type="button" class="choice-pill" data-build="balanced">Balanced Host</button>
-                  <button type="button" class="choice-pill" data-build="athletic">Athletic V-Taper</button>
-                  <button type="button" class="choice-pill" data-build="slender">Slender &amp; Tall</button>
-                  <button type="button" class="choice-pill" data-build="hourglass">Curved / Sculpted</button>
-                  <button type="button" class="choice-pill" data-build="heroic">Broad Executive</button>
-                  <button type="button" class="choice-pill" data-build="compact">Compact Companion</button>
+                <div class="pill-grid" id="bodyBuildPills" role="group" aria-label="Body quick builds">
+                  <button type="button" class="choice-pill" data-build="balanced">Balanced host</button>
+                  <button type="button" class="choice-pill" data-build="athletic">Athletic V-taper</button>
+                  <button type="button" class="choice-pill" data-build="slender">Slender and tall</button>
+                  <button type="button" class="choice-pill" data-build="hourglass">Curved</button>
+                  <button type="button" class="choice-pill" data-build="heroic">Broad executive</button>
+                  <button type="button" class="choice-pill" data-build="compact">Compact companion</button>
                 </div>
               </div>
 
               <div class="control-block">
-                <h3>Torso, Shoulders, Waist &amp; Limbs</h3>
+                <div class="block-head">
+                  <h3>Torso, shoulders, waist and arms</h3>
+                  <span class="hint-text">Click a value to reset it</span>
+                </div>
                 <div class="sliders-grid" id="bodySlidersHost"></div>
               </div>
 
               <div class="control-block">
-                <h3>Posture, Stage Frame &amp; Backdrop</h3>
+                <h3>Posture, frame and backdrop</h3>
                 <div class="field-row two-col">
                   <label class="field">
-                    <span>Speaking Posture &amp; Gestures</span>
+                    <span>Posture and gestures</span>
                     <select id="postureSelect"></select>
                   </label>
                   <label class="field">
-                    <span>Companion Frame Shape</span>
+                    <span>Frame shape</span>
                     <select id="stageShapeSelect">
-                      <option value="card">Portrait Rounded Card</option>
-                      <option value="circle">Classic SitePal Circle Orb</option>
-                      <option value="arch">Architectural Arch</option>
-                      <option value="cutout">Floating Website Cutout (Transparent)</option>
+                      <option value="card">Rounded portrait card</option>
+                      <option value="circle">Circle orb (classic)</option>
+                      <option value="arch">Arch</option>
+                      <option value="cutout">Floating cutout (transparent)</option>
                     </select>
                   </label>
                 </div>
 
-                <div class="field-row two-col" style="margin-top:10px">
+                <div class="field-row two-col gap-top">
                   <label class="field">
-                    <span>Stage Backdrop Theme</span>
+                    <span>Backdrop</span>
                     <select id="bgStyleSelect">
-                      <option value="studio_dark">Studio Obsidian</option>
-                      <option value="warm_cream">Warm Alabaster</option>
-                      <option value="sky_glass">Sky Daylight</option>
-                      <option value="emerald_mist">Emerald Teal</option>
-                      <option value="sunset">Warm Dusk</option>
-                      <option value="custom">Custom Colors</option>
-                      <option value="transparent">Transparent Cutout</option>
+                      <option value="studio_dark">Studio obsidian</option>
+                      <option value="warm_cream">Warm alabaster</option>
+                      <option value="sky_glass">Sky daylight</option>
+                      <option value="emerald_mist">Emerald teal</option>
+                      <option value="sunset">Warm dusk</option>
+                      <option value="custom">Custom colors</option>
+                      <option value="transparent">Transparent</option>
                     </select>
                   </label>
                   <div class="field inline-colors" id="customBgColorsWrap">
-                    <div>
+                    <label class="color-field">
                       <span>Backdrop</span>
                       <input type="color" id="bgColorPicker" value="#141b2d">
-                    </div>
-                    <div>
+                    </label>
+                    <label class="color-field">
                       <span>Glow</span>
                       <input type="color" id="bgAccentPicker" value="#2b6cb0">
-                    </div>
+                    </label>
                     <label class="check-field">
                       <input type="checkbox" id="haloGlowCheck" checked>
-                      <span>Voice Halo</span>
+                      <span>Voice halo</span>
                     </label>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- TAB 2: FACE & HEAD SCULPTING -->
-            <div class="tab-content" id="tabFace" role="tabpanel">
+            <!-- TAB 2: FACE -->
+            <div class="tab-content" id="tabFace" role="tabpanel" aria-labelledby="tabBtnFace" hidden>
               <div class="control-block">
                 <div class="block-head">
-                  <h3>Base Contour &amp; Skin Material</h3>
+                  <h3>Contour and skin</h3>
                   <div class="seg" id="genderStyleSeg" role="group" aria-label="Facial contour style">
-                    <button type="button" data-gstyle="feminine" class="active">Soft / Feminine</button>
+                    <button type="button" data-gstyle="feminine" class="active">Soft</button>
                     <button type="button" data-gstyle="neutral">Neutral</button>
-                    <button type="button" data-gstyle="masculine">Angular / Masculine</button>
+                    <button type="button" data-gstyle="masculine">Angular</button>
                   </div>
                 </div>
 
                 <div class="swatch-bar">
-                  <div class="swatches" id="skinSwatches"></div>
-                  <label class="color-chip-label" title="Custom skin hex color">
+                  <div class="swatches" id="skinSwatches" role="group" aria-label="Skin tone"></div>
+                  <label class="color-chip-label" title="Pick any skin color">
                     <span>Custom</span>
                     <input type="color" id="skinColorPicker" value="#f1c6b0">
                   </label>
                 </div>
 
-                <div class="sliders-grid" id="skinMaterialSlidersHost" style="margin-top:10px"></div>
+                <div class="sliders-grid gap-top" id="skinMaterialSlidersHost"></div>
               </div>
 
               <div class="control-block">
-                <h3>Cranium, Cheekbones, Jaw &amp; Ears</h3>
+                <h3>Head, cheekbones, jaw and ears</h3>
                 <div class="sliders-grid" id="headSlidersHost"></div>
-                <div class="field-row two-col" style="margin-top:10px">
+                <div class="field-row two-col gap-top">
                   <label class="field">
-                    <span>Ear Style</span>
+                    <span>Ear style</span>
                     <select id="earStyleSelect">
-                      <option value="human">Natural Human</option>
-                      <option value="pointed">Pointed / Stylized</option>
-                      <option value="cyber">Cybernetic Audio Pods</option>
+                      <option value="human">Natural</option>
+                      <option value="pointed">Pointed</option>
+                      <option value="cyber">Cybernetic audio pods</option>
                     </select>
                   </label>
                   <label class="field">
-                    <span>Eyelash Definition</span>
+                    <span>Eyelashes</span>
                     <select id="lashStyleSelect">
-                      <option value="lush">Lush Studio</option>
-                      <option value="classic">Classic Balanced</option>
-                      <option value="subtle">Subtle Minimal</option>
+                      <option value="lush">Lush</option>
+                      <option value="classic">Classic</option>
+                      <option value="subtle">Subtle</option>
                     </select>
                   </label>
                 </div>
               </div>
 
               <div class="control-block">
-                <h3>Eyes, Brows, Nose &amp; Articulatory Lips</h3>
-                <div class="field-row two-col" style="margin-bottom:10px">
+                <h3>Eyes, brows, nose and lips</h3>
+                <div class="field-row two-col gap-bottom">
                   <div class="field">
-                    <span>Iris Color</span>
+                    <span id="irisLabel">Iris color</span>
                     <div class="swatch-bar compact">
-                      <div class="swatches" id="irisSwatches"></div>
-                      <input type="color" id="irisColorPicker" value="#3b82a6">
+                      <div class="swatches" id="irisSwatches" role="group" aria-labelledby="irisLabel"></div>
+                      <input type="color" id="irisColorPicker" value="#3b82a6" aria-label="Custom iris color">
                     </div>
                   </div>
                   <div class="field">
-                    <span>Lip Vermilion Tint</span>
+                    <span id="lipLabel">Lip color</span>
                     <div class="swatch-bar compact">
-                      <div class="swatches" id="lipSwatches"></div>
-                      <input type="color" id="lipColorPicker" value="#d6687c">
+                      <div class="swatches" id="lipSwatches" role="group" aria-labelledby="lipLabel"></div>
+                      <input type="color" id="lipColorPicker" value="#d6687c" aria-label="Custom lip color">
                     </div>
                   </div>
                 </div>
@@ -386,206 +541,205 @@
               </div>
             </div>
 
-            <!-- TAB 3: HAIR, WARDROBE & ACCESSORIES -->
-            <div class="tab-content" id="tabStyle" role="tabpanel">
+            <!-- TAB 3: HAIR AND OUTFIT -->
+            <div class="tab-content" id="tabStyle" role="tabpanel" aria-labelledby="tabBtnStyle" hidden>
               <div class="control-block">
-                <h3>Hairstyle &amp; Coloring</h3>
-                <div class="pill-grid" id="hairStylePills"></div>
-                <div class="field-row three-col" style="margin-top:12px">
-                  <label class="field">
-                    <span>Hair Base Color</span>
+                <h3>Hairstyle and color</h3>
+                <div class="pill-grid" id="hairStylePills" role="group" aria-label="Hairstyle"></div>
+                <div class="field-row hair-colors gap-top">
+                  <div class="field">
+                    <span id="hairLabel">Hair color</span>
                     <div class="swatch-bar compact">
-                      <div class="swatches" id="hairSwatches"></div>
-                      <input type="color" id="hairColorPicker" value="#3c2734">
+                      <div class="swatches" id="hairSwatches" role="group" aria-labelledby="hairLabel"></div>
+                      <input type="color" id="hairColorPicker" value="#3c2734" aria-label="Custom hair color">
                     </div>
-                  </label>
+                  </div>
                   <label class="field">
-                    <span>Crown Highlight</span>
+                    <span>Highlight</span>
                     <input type="color" id="hairHighlightPicker" value="#7b546c">
                   </label>
                   <label class="field">
-                    <span>Facial Hair</span>
+                    <span>Facial hair</span>
                     <select id="facialHairSelect"></select>
                   </label>
                 </div>
               </div>
 
               <div class="control-block">
-                <h3>Wardrobe &amp; Companion Attire</h3>
-                <div class="pill-grid" id="outfitStylePills"></div>
-                <div class="field-row three-col" style="margin-top:12px">
+                <h3>Outfit</h3>
+                <div class="pill-grid" id="outfitStylePills" role="group" aria-label="Outfit"></div>
+                <div class="field-row three-col gap-top">
                   <label class="field">
-                    <span>Outer / Jacket Color</span>
+                    <span>Jacket</span>
                     <input type="color" id="outfitPrimaryPicker" value="#1e2f4d">
                   </label>
                   <label class="field">
-                    <span>Inner Shirt / Trim</span>
+                    <span>Shirt and trim</span>
                     <input type="color" id="outfitSecondaryPicker" value="#f4f6fb">
                   </label>
                   <label class="field">
-                    <span>Tie / Cyber Accent</span>
+                    <span>Tie and accent</span>
                     <input type="color" id="outfitAccentPicker" value="#38bdf8">
                   </label>
                 </div>
               </div>
 
               <div class="control-block">
-                <h3>Glasses &amp; Concierge Gear</h3>
+                <h3>Glasses and gear</h3>
                 <div class="field-row two-col">
                   <label class="field">
-                    <span>Eyewear / Visor</span>
+                    <span>Eyewear</span>
                     <select id="glassesSelect"></select>
                   </label>
                   <label class="field">
-                    <span>Frame / Lens Color</span>
+                    <span>Frame color</span>
                     <input type="color" id="glassesColorPicker" value="#1f2430">
                   </label>
                 </div>
-                <div class="checks-strip" style="margin-top:12px">
-                  <label class="check-field"><input type="checkbox" id="headsetMicCheck" checked> <span>SitePal Concierge Headset Mic</span></label>
-                  <label class="check-field"><input type="checkbox" id="nameBadgeCheck" checked> <span>Lapel Accent Pin</span></label>
+                <div class="checks-strip gap-top">
+                  <label class="check-field"><input type="checkbox" id="headsetMicCheck" checked> <span>Headset mic</span></label>
+                  <label class="check-field"><input type="checkbox" id="nameBadgeCheck" checked> <span>Lapel pin</span></label>
                 </div>
               </div>
             </div>
 
-            <!-- TAB 4: VOICE SYNTHESIS (TTS.WASM) -->
-            <div class="tab-content" id="tabVoice" role="tabpanel">
+            <!-- TAB 4: VOICE -->
+            <div class="tab-content" id="tabVoice" role="tabpanel" aria-labelledby="tabBtnVoice" hidden>
               <div class="control-block">
                 <div class="block-head">
-                  <h3>Physical Vocal-Tract Voice (<code>tts.wasm</code>)</h3>
-                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                    <div class="seg" id="voiceGenderSeg" role="group" aria-label="Vocal tract gender">
+                  <h3>Voice</h3>
+                  <div class="head-actions">
+                    <div class="seg" id="voiceGenderSeg" role="group" aria-label="Vocal tract">
                       <button type="button" data-vgender="female" class="active">Female</button>
                       <button type="button" data-vgender="male">Male</button>
                     </div>
-                    <button type="button" id="randomVoiceOnlyBtn" class="btn xs primary">🎲 Random Voice</button>
+                    <button type="button" id="randomVoiceOnlyBtn" class="btn xs"><svg class="ic"><use href="#i-dice"/></svg>Random voice</button>
                   </div>
                 </div>
 
-                <div class="sub-label">Built-in Vocal Archetypes</div>
-                <div class="pill-grid" id="voicePresetPills"></div>
+                <div class="sub-label">Built-in voices</div>
+                <div class="pill-grid" id="voicePresetPills" role="group" aria-label="Built-in voices"></div>
 
-                <div class="sub-label" style="margin-top:10px">Real Speaker Acoustic Profiles (CMU Arctic)</div>
-                <div class="pill-grid" id="voiceArcticPills"></div>
+                <div class="sub-label gap-top">Recorded-speaker profiles (CMU Arctic)</div>
+                <div class="pill-grid" id="voiceArcticPills" role="group" aria-label="Recorded-speaker profiles"></div>
               </div>
 
               <div class="control-block">
                 <div class="block-head">
-                  <h3>Larynx Source &amp; Tract Parameters</h3>
-                  <div class="seg" id="glottalSourceSeg" role="group" aria-label="Glottal excitation model">
-                    <button type="button" data-folds="false" class="active">LF Equation Pulse</button>
-                    <button type="button" data-folds="true">2-Mass Vocal Folds</button>
+                  <h3>Larynx and vocal tract</h3>
+                  <div class="seg" id="glottalSourceSeg" role="group" aria-label="Glottal source model">
+                    <button type="button" data-folds="false" class="active">LF pulse</button>
+                    <button type="button" data-folds="true">Two-mass folds</button>
                   </div>
                 </div>
                 <div class="sliders-grid" id="voiceSlidersHost"></div>
-                <div class="checks-strip" style="margin-top:10px">
-                  <label class="check-field"><input type="checkbox" id="voiceWhisperCheck"> <span>Unvoiced Whisper Mode</span></label>
-                  <label class="check-field"><input type="checkbox" id="autoAuditionVoiceCheck" checked> <span>Auto-speak short preview when changing voice</span></label>
+                <div class="checks-strip gap-top">
+                  <label class="check-field"><input type="checkbox" id="voiceWhisperCheck"> <span>Whisper (unvoiced)</span></label>
+                  <label class="check-field"><input type="checkbox" id="autoAuditionVoiceCheck" checked> <span>Speak a short preview when the voice changes</span></label>
                 </div>
               </div>
             </div>
 
-            <!-- TAB 5: AIML XML CHATBOT BRAIN -->
-            <div class="tab-content" id="tabChat" role="tabpanel">
+            <!-- TAB 5: CHAT -->
+            <div class="tab-content" id="tabChat" role="tabpanel" aria-labelledby="tabBtnChat" hidden>
               <div class="control-block">
                 <div class="block-head">
-                  <h3>Companion Role &amp; Chat Mode</h3>
+                  <h3>Identity and greeting</h3>
                   <label class="switch-pill">
                     <input type="checkbox" id="chatEnabledCheck" checked>
-                    <span>Enable Interactive Q&amp;A Chat Bot</span>
+                    <span>Answer questions in chat</span>
                   </label>
                 </div>
 
                 <div class="field-row three-col">
                   <label class="field">
-                    <span>Bot Name (<code>&lt;bot name="name"/&gt;</code>)</span>
-                    <input type="text" id="botNameInput" value="Aria">
+                    <span>Name</span>
+                    <input type="text" id="botNameInput" value="Aria" maxlength="40">
                   </label>
                   <label class="field">
-                    <span>Role / Title</span>
-                    <input type="text" id="botRoleInput" value="Website Concierge">
+                    <span>Role</span>
+                    <input type="text" id="botRoleInput" value="Website Concierge" maxlength="60">
                   </label>
                   <label class="field">
-                    <span>Website / Company</span>
-                    <input type="text" id="botCompanyInput" value="bot.computer">
+                    <span>Website or company</span>
+                    <input type="text" id="botCompanyInput" value="bot.computer" maxlength="60">
                   </label>
                 </div>
 
-                <label class="field" style="margin-top:10px">
-                  <span>Welcome Spoken Greeting (supports inline <code>[cheerful]</code>, <code>[calm]</code>, <code>[sing]</code> tags)</span>
+                <label class="field gap-top">
+                  <span>Spoken greeting <em class="field-hint">Speech tags such as <code>[cheerful]</code>, <code>[calm]</code> and <code>[sing]</code> work here</em></span>
                   <input type="text" id="botGreetingInput" value="[cheerful] Hi! Welcome to our website! I'm Aria, your virtual companion. Click below to ask me any question!">
                 </label>
               </div>
 
               <div class="control-block">
                 <div class="block-head">
-                  <h3>Starter AIML XML Knowledge Packs</h3>
-                  <span class="hint-text">Load a template, or import your own <code>.aiml</code> / <code>.xml</code></span>
+                  <h3>Starter knowledge packs</h3>
+                  <span class="hint-text">Load a template, or import your own <code>.aiml</code> file below</span>
                 </div>
-                <div class="pill-grid" id="aimlPackPills"></div>
+                <div class="pill-grid" id="aimlPackPills" role="group" aria-label="Starter knowledge packs"></div>
               </div>
 
-              <!-- Quick Visual Q&A Rule Builder -->
+              <!-- Quick Q&A rule builder -->
               <div class="control-block subtle-inset">
-                <h3>Quick Add Q&amp;A Rule (Auto-generates AIML <code>&lt;category&gt;</code>)</h3>
+                <h3>Add a Q&amp;A rule</h3>
                 <div class="field-row two-col">
                   <label class="field">
-                    <span>User Pattern (<code>*</code> / <code>#</code> wildcards or <code>|</code> aliases)</span>
-                    <input type="text" id="qaPatternInput" placeholder="e.g. # BUSINESS HOURS # | WHEN ARE YOU OPEN">
+                    <span>When the visitor says <em class="field-hint"><code>*</code> and <code>#</code> are wildcards, <code>|</code> separates alternatives</em></span>
+                    <input type="text" id="qaPatternInput" placeholder="# business hours # | when are you open">
                   </label>
-                  <label class="field">
-                    <span>Avatar Gesture &amp; Follow-up Chips (comma-separated)</span>
-                    <div style="display:flex;gap:6px">
-                      <select id="qaEmoteSelect" style="width:125px">
+                  <div class="field">
+                    <span id="qaExtrasLabel">Gesture and follow-up chips</span>
+                    <div class="inline-pair">
+                      <select id="qaEmoteSelect" aria-label="Gesture">
                         <option value="">No gesture</option>
-                        <option value="wave">👋 Wave</option>
-                        <option value="happy">😊 Happy</option>
-                        <option value="nod">👍 Nod</option>
-                        <option value="wink">😉 Wink</option>
-                        <option value="think">🤔 Think</option>
+                        <option value="wave">Wave</option>
+                        <option value="happy">Smile</option>
+                        <option value="nod">Nod</option>
+                        <option value="wink">Wink</option>
+                        <option value="think">Think</option>
                       </select>
-                      <input type="text" id="qaChipsInput" placeholder="Pricing, Contact us" style="flex:1">
+                      <input type="text" id="qaChipsInput" placeholder="Pricing, Contact us" aria-label="Follow-up chips, comma separated">
                     </div>
-                  </label>
+                  </div>
                 </div>
-                <div class="field-row" style="margin-top:8px;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                  <label class="field" style="flex:1;min-width:220px">
-                    <span>Bot Spoken &amp; Chat Answer</span>
-                    <input type="text" id="qaAnswerInput" placeholder="e.g. [cheerful] We are open Monday through Friday from 9 AM to 6 PM!">
+                <div class="qa-answer-row gap-top">
+                  <label class="field">
+                    <span>The bot answers</span>
+                    <input type="text" id="qaAnswerInput" placeholder="[cheerful] We are open Monday through Friday from 9 AM to 6 PM!">
                   </label>
-                  <button type="button" id="addQaRuleBtn" class="btn primary">+ Add to AIML XML</button>
+                  <button type="button" id="addQaRuleBtn" class="btn primary"><svg class="ic"><use href="#i-plus"/></svg>Add rule</button>
                 </div>
               </div>
 
-              <!-- Raw AIML XML Editor + Import/Export -->
+              <!-- Raw AIML editor -->
               <div class="control-block">
                 <div class="block-head">
-                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                    <h3>AIML XML Document</h3>
-                    <span class="status-pill ok" id="aimlValidBadge">✓ Valid AIML</span>
+                  <div class="head-title">
+                    <h3>AIML document</h3>
+                    <span class="status-pill ok" id="aimlValidBadge" role="status">Valid AIML</span>
                   </div>
-                  <div style="display:flex;gap:6px;flex-wrap:wrap">
-                    <label class="btn xs file-btn">
-                      📂 Import .XML / .AIML
-                      <input type="file" id="importAimlFileInput" accept=".xml,.aiml,text/xml,application/xml" hidden>
-                    </label>
-                    <button type="button" id="exportAimlFileBtn" class="btn xs">⬇ Export .AIML</button>
+                  <div class="head-actions">
+                    <button type="button" id="importAimlBtn" class="btn xs"><svg class="ic"><use href="#i-upload"/></svg>Import</button>
+                    <input type="file" id="importAimlFileInput" accept=".xml,.aiml,text/xml,application/xml" hidden>
+                    <button type="button" id="exportAimlFileBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>Export</button>
                   </div>
                 </div>
-                <textarea id="aimlXmlEditor" class="code-editor" rows="11" spellcheck="false"></textarea>
+                <textarea id="aimlXmlEditor" class="code-editor" rows="11" spellcheck="false" aria-label="AIML XML document"></textarea>
+                <p class="editor-note" id="aimlErrorNote" hidden></p>
               </div>
 
-              <!-- Live Studio Chat Sandbox -->
+              <!-- Live chat tester -->
               <div class="control-block">
                 <div class="block-head">
-                  <h3>Test Your AIML Chat Bot Live</h3>
-                  <button type="button" id="resetStudioChatBtn" class="btn xs">↺ Clear Chat</button>
+                  <h3>Test the chat</h3>
+                  <button type="button" id="resetStudioChatBtn" class="btn xs"><svg class="ic"><use href="#i-reset"/></svg>Clear</button>
                 </div>
                 <div class="studio-chat-box">
-                  <div class="studio-chat-messages" id="studioChatMessages"></div>
+                  <div class="studio-chat-messages" id="studioChatMessages" aria-live="polite"></div>
                   <div class="studio-chat-chips" id="studioChatChips"></div>
                   <form id="studioChatForm" class="studio-chat-form">
-                    <input type="text" id="studioChatInput" placeholder="Type a question to test AIML pattern matching &amp; lip-sync…" autocomplete="off">
+                    <input type="text" id="studioChatInput" placeholder="Ask a question to test your rules…" autocomplete="off" aria-label="Test question">
                     <button type="submit" class="btn primary">Send</button>
                   </form>
                 </div>
@@ -597,28 +751,28 @@
     </section>
 
     <!-- ================================================================== -->
-    <!-- 3. LIVE WEBSITE EMBED PREVIEW & SELF-CONTAINED DOWNLOAD            -->
+    <!-- 3. LIVE PREVIEW AND EXPORT                                         -->
     <!-- ================================================================== -->
-    <section id="embedSection" class="embed-section" aria-label="Website Embed and Self-Contained Download">
+    <section id="embedSection" class="embed-section" aria-labelledby="embedHeading">
       <div class="section-header">
         <div>
-          <span class="section-kicker">Ship Anywhere · Zero Backend Required</span>
-          <h2>Live Website Preview &amp; Self-Contained Export</h2>
+          <h2 id="embedHeading">Preview and export</h2>
+          <p class="section-sub">Try the real widget inside a sample page, then download it as a single file.</p>
         </div>
-        <div class="seg" id="previewViewportSeg" role="group" aria-label="Preview viewport size">
-          <button type="button" data-vp="desktop" class="active">🖥 Desktop Site</button>
-          <button type="button" data-vp="mobile">📱 Mobile Site (375px)</button>
+        <div class="seg" id="previewViewportSeg" role="group" aria-label="Preview size">
+          <button type="button" data-vp="desktop" class="active"><svg class="ic"><use href="#i-desktop"/></svg>Desktop</button>
+          <button type="button" data-vp="mobile"><svg class="ic"><use href="#i-phone"/></svg>Mobile</button>
         </div>
       </div>
 
       <div class="embed-grid">
-        <!-- Mock Customer Website Frame with REAL Embedded Widget Inside -->
+        <!-- Sample customer page with the real widget mounted inside -->
         <div class="mock-browser-wrap">
           <div class="mock-browser" id="mockBrowser">
             <div class="mock-browser-bar">
-              <div class="mock-dots"><span></span><span></span><span></span></div>
+              <div class="mock-dots" aria-hidden="true"><span></span><span></span><span></span></div>
               <div class="mock-url" id="mockUrlDisplay">https://bot.computer</div>
-              <button type="button" id="remountPreviewBtn" class="btn xs">↻ Refresh</button>
+              <button type="button" id="remountPreviewBtn" class="mock-reload" title="Reload the widget" aria-label="Reload the widget"><svg class="ic"><use href="#i-refresh"/></svg></button>
             </div>
             <div class="mock-webpage" id="mockWebpage">
               <div class="mock-site-nav">
@@ -626,87 +780,122 @@
                 <div class="mock-links"><span>Product</span><span>Pricing</span><span>Docs</span></div>
               </div>
               <div class="mock-site-hero">
-                <span class="mock-tag">Live Companion Preview</span>
-                <h3 id="mockSiteHeadline">Interact with your embedded Bot right inside this simulated webpage.</h3>
-                <p>Click <strong>▶ Speak</strong> or <strong>💬 Ask</strong> on the floating companion to test voice lip-sync, cursor gaze tracking, minimization, and mobile responsiveness.</p>
+                <h3 id="mockSiteHeadline">Your page, with the companion in the corner.</h3>
+                <p>This is the real widget. Press <strong>Speak</strong> or <strong>Ask</strong> on it to test lip sync, gaze tracking, minimizing and the mobile layout.</p>
                 <div class="mock-cards">
                   <div class="mock-mini-card">
-                    <strong>Shadow DOM Isolated</strong>
-                    <span>Host site CSS never collides with your companion or chat UI.</span>
+                    <strong>Isolated in Shadow DOM</strong>
+                    <span>Your site’s CSS never collides with the companion or its chat.</span>
                   </div>
                   <div class="mock-mini-card">
-                    <strong>Mobile-Ready Dock</strong>
-                    <span>Switch to Mobile view above to test compact phone layout.</span>
+                    <strong>Docks on phones</strong>
+                    <span>Switch to Mobile above to see the compact layout.</span>
                   </div>
                 </div>
               </div>
-              <!-- Real Shadow-DOM widget mounts inside here in `contained` mode! -->
+              <!-- The Shadow DOM widget mounts here in `contained` mode -->
             </div>
           </div>
         </div>
 
-        <!-- Export Controls, Self-Contained Single-File Builder & Code Snippets -->
+        <!-- Export controls and snippets -->
         <div class="panel export-panel">
-          <h3>Widget Placement &amp; Behavior</h3>
+          <h3>Placement and behavior</h3>
           <div class="field-row two-col">
             <label class="field">
-              <span>Corner Position</span>
+              <span>Corner</span>
               <select id="embedPositionSelect">
-                <option value="bottom-right">Bottom Right (Classic)</option>
-                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-right">Bottom right</option>
+                <option value="bottom-left">Bottom left</option>
               </select>
             </label>
             <label class="field">
-              <span>Companion Size</span>
+              <span>Size</span>
               <select id="embedSizeSelect">
                 <option value="compact">Compact</option>
                 <option value="standard" selected>Standard</option>
-                <option value="large">Large Presenter</option>
+                <option value="large">Large presenter</option>
               </select>
             </label>
           </div>
 
-          <div class="checks-strip" style="margin-top:10px">
-            <label class="check-field"><input type="checkbox" id="embedEyeTrackCheck" checked> <span>Follow Cursor Gaze</span></label>
-            <label class="check-field"><input type="checkbox" id="embedCaptionsCheck" checked> <span>Word-Synced Captions</span></label>
-            <label class="check-field"><input type="checkbox" id="embedAutoGreetCheck"> <span>Auto-Greet on Visit</span></label>
-            <label class="check-field"><input type="checkbox" id="embedStartOpenCheck"> <span>Start with Chat Open</span></label>
+          <div class="checks-strip gap-top">
+            <label class="check-field"><input type="checkbox" id="embedEyeTrackCheck" checked> <span>Follow the cursor</span></label>
+            <label class="check-field"><input type="checkbox" id="embedCaptionsCheck" checked> <span>Word-synced captions</span></label>
+            <label class="check-field"><input type="checkbox" id="embedAutoGreetCheck"> <span>Greet on arrival</span></label>
+            <label class="check-field"><input type="checkbox" id="embedStartOpenCheck"> <span>Start with chat open</span></label>
           </div>
 
           <hr class="divider">
 
           <div class="download-hero-box">
-            <div class="dl-copy">
-              <span class="badge accent-badge">100% Self-Contained · Offline Ready</span>
-              <h4>Single-File Local Script (<code id="selfContainedFilenameLabel">aria-bot.js</code>)</h4>
-              <p>Packs your sculpted avatar, voice physics, embedded AIML XML, and compressed <code>tts.wasm</code> into <strong>one local JavaScript file</strong> — zero external dependencies.</p>
-            </div>
+            <h4>Download as one file <code id="selfContainedFilenameLabel">aria-bot.js</code></h4>
+            <p>Your avatar, voice settings, AIML brain and a compressed <code>tts.wasm</code>, packed into a single script. Works offline, about 920&nbsp;KB.</p>
             <div class="dl-buttons">
-              <button type="button" id="downloadSelfContainedJsBtn" class="btn primary full-w">⬇ Download Self-Contained .JS</button>
-              <button type="button" id="downloadDemoHtmlBtn" class="btn full-w">⬇ Download Standalone Demo .HTML</button>
+              <button type="button" id="downloadSelfContainedJsBtn" class="btn primary full-w"><svg class="ic"><use href="#i-download"/></svg>Download self-contained .js</button>
+              <button type="button" id="downloadDemoHtmlBtn" class="btn full-w"><svg class="ic"><use href="#i-download"/></svg>Download a standalone demo page</button>
             </div>
-            <div class="dl-status" id="exportStatusText" hidden></div>
+            <div class="dl-status" id="exportStatusText" role="status" hidden></div>
           </div>
 
           <div class="multi-file-row">
-            <span class="tiny-label">Or download separate cached files:</span>
-            <button type="button" id="dlEmbedRuntimeBtn" class="btn xs">↓ bot-embed.js</button>
-            <button type="button" id="dlRawWasmBtn" class="btn xs">↓ tts.wasm</button>
-            <button type="button" id="dlAimlOnlyBtn" class="btn xs">↓ brain.aiml</button>
+            <span class="tiny-label">Or get the separate files</span>
+            <button type="button" id="dlEmbedRuntimeBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>bot-embed.js</button>
+            <button type="button" id="dlRawWasmBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>tts.wasm</button>
+            <button type="button" id="dlAimlOnlyBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>brain.aiml</button>
           </div>
 
           <div class="snippet-box-wrap">
-            <div class="block-head" style="margin-bottom:6px">
+            <div class="block-head snippet-head">
               <div class="seg" id="snippetModeSeg" role="group" aria-label="Embed snippet format">
-                <button type="button" data-snip="self" class="active">1-File Self-Contained</button>
-                <button type="button" data-snip="multi">Separate Files</button>
+                <button type="button" data-snip="self" class="active">One file</button>
+                <button type="button" data-snip="multi">Separate files</button>
                 <button type="button" data-snip="sdk">JS API</button>
               </div>
-              <button type="button" id="copySnippetBtn" class="btn xs primary">Copy Code</button>
+              <button type="button" id="copySnippetBtn" class="btn xs"><svg class="ic"><use href="#i-copy"/></svg><span class="btn-label">Copy</span></button>
             </div>
-            <pre class="code-pre"><code id="embedCodeOutput"></code></pre>
+            <pre class="code-pre" tabindex="0" aria-label="Embed code"><code id="embedCodeOutput"></code></pre>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- 4. QUESTIONS AND ANSWERS                                           -->
+    <!-- ================================================================== -->
+    <section id="faqSection" class="faq-section" aria-labelledby="faqHeading">
+      <div class="section-header">
+        <div>
+          <h2 id="faqHeading">Questions and answers</h2>
+          <p class="section-sub">The short version of how it works and what it needs.</p>
+        </div>
+      </div>
+
+      <div class="faq-list">
+        <details class="faq-item" open>
+          <summary><h3>What is bot.computer?</h3></summary>
+          <p>A studio for making an animated talking avatar for a website. You sculpt the character’s face and body, choose or design its voice, optionally give it an AIML question-and-answer brain, and export everything as one JavaScript file that you add to your own pages.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Does it need a server, an account or an API key?</h3></summary>
+          <p>No. The voice is synthesized in the visitor’s browser by <code>tts.wasm</code>, and the chat answers come from AIML rules that ship inside the script. Nothing is sent to a server, so there are no per-minute voice bills and nothing to sign up for.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>How do I add the avatar to my website?</h3></summary>
+          <p>Download the self-contained <code>.js</code> file from <a href="#embedSection">Preview and export</a>, put it next to your page and add one script tag. The companion appears in the corner of the page inside a Shadow DOM, so your site’s styles and its own can’t interfere with each other. The file is about 920&nbsp;KB and works offline.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>How does the lip sync work?</h3></summary>
+          <p>The speech comes from a physical model of the human vocal tract rather than from recordings. Every 5 milliseconds the model reports where the jaw, tongue and lips are, and the avatar’s mouth is drawn from those positions, so the lip shapes always match the sound.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>What is AIML, and do I have to write it?</h3></summary>
+          <p>AIML is a simple XML format for chatbot rules: a pattern the visitor might type, and the answer the bot gives. You can start from a ready-made knowledge pack, add rules with a short form, or edit the XML directly. Chat is optional, and the avatar can simply greet visitors instead.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Which languages and browsers does it support?</h3></summary>
+          <p>The voice speaks English. The studio and the exported companion need a modern browser with WebAssembly and Web Audio, such as a current version of Chrome, Edge, Firefox or Safari, on desktop or mobile.</p>
+        </details>
       </div>
     </section>
   </main>
@@ -714,31 +903,33 @@
   <footer class="site-footer">
     <div class="footer-inner">
       <div>
-        <strong><a href="https://bot.computer">bot.computer</a></strong> by <a href="https://f2i.com" target="_blank" rel="noopener">f2i.com</a> · Powered by <a href="https://github.com/f2i-com/tts" target="_blank" rel="noopener">f2i-com/tts</a> (<code>tts.wasm</code>).
+        <strong><a href="https://bot.computer">bot.computer</a></strong> by <a href="https://f2i.com" target="_blank" rel="noopener">f2i.com</a>. Powered by <a href="https://github.com/f2i-com/tts" target="_blank" rel="noopener">f2i-com/tts</a> (<code>tts.wasm</code>).
       </div>
-      <div>Pure HTML, CSS &amp; JavaScript · Zero tracking · <a href="https://f2i.com" target="_blank" rel="noopener">f2i.com</a></div>
+      <div>Pure HTML, CSS and JavaScript. Zero tracking.</div>
     </div>
   </footer>
 
-  <!-- Thumb-Friendly Mobile Bottom App Bar -->
-  <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Mobile section navigation">
+  <!-- Mobile bottom app bar -->
+  <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Sections">
     <a href="#top" class="mob-nav-item active" data-mob-nav="top">
-      <span class="mob-nav-icon">🏠</span>
+      <svg class="ic"><use href="#i-home"/></svg>
       <span>Overview</span>
     </a>
     <a href="#studioSection" class="mob-nav-item" data-mob-nav="studio">
-      <span class="mob-nav-icon">✦</span>
-      <span>Designer</span>
+      <svg class="ic"><use href="#i-sculpt"/></svg>
+      <span>Studio</span>
     </a>
     <a href="#studioSection" data-jump-tab="tabChat" class="mob-nav-item" data-mob-nav="chat">
-      <span class="mob-nav-icon">🧠</span>
-      <span>AIML Chat</span>
+      <svg class="ic"><use href="#i-chat"/></svg>
+      <span>Chat</span>
     </a>
     <a href="#embedSection" class="mob-nav-item" data-mob-nav="embed">
-      <span class="mob-nav-icon">📦</span>
-      <span>Embed</span>
+      <svg class="ic"><use href="#i-code"/></svg>
+      <span>Export</span>
     </a>
   </nav>
+
+  <div class="toast-host" id="toastHost" role="status" aria-live="polite"></div>
 
   <script type="module" src="./src/app.js"></script>
 </body>

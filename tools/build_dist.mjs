@@ -45,7 +45,19 @@ function copyRecursive(src, dest) {
   }
 }
 
-const siteFiles = ["index.html", "embed-demo.html", "styles.css", "CNAME", ".nojekyll"];
+const siteFiles = [
+  "index.html",
+  "embed-demo.html",
+  "styles.css",
+  "favicon.svg",
+  "favicon.ico",
+  "apple-touch-icon.png",
+  "assets",
+  "robots.txt",
+  "sitemap.xml",
+  "CNAME",
+  ".nojekyll",
+];
 for (const f of siteFiles) {
   const p = path.join(root, f);
   if (fs.existsSync(p)) copyRecursive(p, path.join(siteDir, f));
