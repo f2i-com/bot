@@ -55,6 +55,9 @@ const siteFiles = [
   "assets",
   "robots.txt",
   "sitemap.xml",
+  "LICENSE",
+  "NOTICE",
+  "THIRD-PARTY-NOTICES.md",
   "CNAME",
   ".nojekyll",
 ];
@@ -227,6 +230,11 @@ const sdkZipBuf = createZipBuffer([
   { name: "bot-sample-self-contained.js", data: Buffer.from(selfContainedSample, "utf8") },
   { name: "concierge.aiml", data: Buffer.from(STARTER_AIML_PACKS.concierge.xml, "utf8") },
   { name: "demo.html", data: Buffer.from(sdkDemoHtml, "utf8") },
+  // Apache 2.0 asks that every copy carries the license and notices.
+  ...["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES.md"].map((name) => ({
+    name,
+    data: fs.readFileSync(path.join(root, name)),
+  })),
 ]);
 fs.writeFileSync(path.join(distDir, "bot-computer-embed-sdk.zip"), sdkZipBuf);
 

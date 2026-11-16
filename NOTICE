@@ -1,0 +1,9 @@
+bot.computer
+Copyright 2026 f2i.com
+
+This product includes the tts.wasm speech synthesizer from the tts project
+(https://github.com/f2i-com/tts), by the same authors, distributed under the
+Apache License, Version 2.0.
+
+Third-party data, fonts and icons that ship with this product are credited,
+with their licenses, in THIRD-PARTY-NOTICES.md.

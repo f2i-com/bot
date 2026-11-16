@@ -2,6 +2,7 @@
   "name": "bot-computer",
   "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "bot.computer — Customizable speaking website companion avatars & AIML chatbots powered by tts.wasm.",
   "scripts": {

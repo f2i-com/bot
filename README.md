@@ -43,6 +43,12 @@ Click **Download self-contained .js** in the studio and add one tag to your webp
 ></script>
 ```
 
+## License
+
+Licensed under the [Apache License, Version 2.0](./LICENSE). Copyright 2026 f2i.com.
+
+The vendored `tts.wasm` engine comes from [f2i-com/tts](https://github.com/f2i-com/tts), by the same authors. Third-party data, fonts and icons that ship with the project are credited in [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md).
+
 ## Brand Assets & Fonts
 
 - `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` — site icons (the mark is a little monitor whose face has a waveform for a mouth).

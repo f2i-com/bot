@@ -2,6 +2,11 @@
  * bot.computer — Standalone Speaking Website Companion & AIML Chatbot Embed SDK
  * Powered by tts.wasm (24 kHz physical vocal-tract synthesis & 200 Hz lip-sync).
  * Pure JavaScript · Shadow DOM isolated · Zero external dependencies.
+ *
+ * @license Apache-2.0
+ * Copyright 2026 f2i.com. Licensed under the Apache License, Version 2.0:
+ * https://www.apache.org/licenses/LICENSE-2.0
+ * Third-party notices: https://github.com/f2i-com/bot/blob/main/THIRD-PARTY-NOTICES.md
  */
 (function (global) {
   "use strict";
