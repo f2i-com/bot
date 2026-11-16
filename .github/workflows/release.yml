@@ -1,0 +1,48 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build upload-ready site & embed bundles and run smoke tests
+        run: |
+          node tools/build_dist.mjs
+          node tests/smoke.mjs
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ASSETS=(
+            dist/bot-computer-site.zip
+            dist/bot-computer-embed-sdk.zip
+            dist/bot-embed.js
+            dist/bot-sample-self-contained.js
+            dist/tts.wasm
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "bot.computer ${TAG} — Web App & Self-Contained Embed SDK" \
+              --generate-notes
+          fi
