@@ -1,0 +1,14 @@
+{
+  "name": "bot-computer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "bot.computer — Customizable speaking website companion avatars & AIML chatbots powered by tts.wasm.",
+  "scripts": {
+    "sync-tts": "node tools/sync_tts.mjs",
+    "build-embed": "node tools/build_embed.mjs",
+    "build": "node tools/sync_tts.mjs && node tools/build_embed.mjs",
+    "start": "node serve.mjs",
+    "test": "node tests/smoke.mjs"
+  }
+}

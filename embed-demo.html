@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Customer Website Embed Demo · bot.computer</title>
+  <style>
+    :root {
+      --bg: #f8f7f3;
+      --card: #ffffff;
+      --ink: #171717;
+      --muted: #64615a;
+      --line: #e4e1d8;
+      --accent: #1764d8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+    }
+    header {
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .brand { font-weight: 800; font-size: 18px; letter-spacing: -0.02em; }
+    .back-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 56px 24px 200px;
+    }
+    .tag {
+      display: inline-block;
+      padding: 4px 11px;
+      border-radius: 999px;
+      background: rgba(23, 100, 216, 0.11);
+      color: var(--accent);
+      font-size: 12.5px;
+      font-weight: 650;
+      margin-bottom: 14px;
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 5vw, 46px);
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+    }
+    p.lead {
+      font-size: 18px;
+      color: var(--muted);
+      max-width: 660px;
+      margin-bottom: 26px;
+    }
+    .demo-triggers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 36px;
+    }
+    .demo-btn {
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--ink);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .demo-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .card h3 { margin: 0 0 6px; font-size: 16px; }
+    .card p { margin: 0; font-size: 14px; color: var(--muted); }
+    code {
+      background: #ece9e0;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">AcmeCloud · Sample Host Website</div>
+    <a class="back-link" href="./index.html">← Back to bot.computer Studio</a>
+  </header>
+
+  <main>
+    <span class="tag">Standalone &lt;script src="./embed/bot-embed.js"&gt; Test Page</span>
+    <h1>Experience a speaking SitePal-style companion embedded on any webpage.</h1>
+    <p class="lead">
+      Look at the bottom-right corner! <strong>Aria</strong> is mounted via <code>./embed/bot-embed.js</code> inside an isolated Shadow DOM, tracking your mouse cursor, synthesizing 24 kHz audio via <code>tts.wasm</code>, and answering AIML XML questions.
+    </p>
+
+    <div class="demo-triggers">
+      <button type="button" class="demo-btn primary" id="trigPitch">▶ Make Companion Pitch Product</button>
+      <button type="button" class="demo-btn" id="trigAskPrice">💬 Ask AIML: "Pricing &amp; Plans"</button>
+      <button type="button" class="demo-btn" id="trigSing">♪ Make Companion Sing!</button>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Cursor Gaze Tracking</h3>
+        <p>Move your mouse (or drag on mobile) anywhere across this page — Aria's irises and 2.5D head perspective follow naturally.</p>
+      </div>
+      <div class="card">
+        <h3>200 Hz Vocal-Tract Lip Sync</h3>
+        <p>Every vowel, bilabial closure (<code>/p, b, m/</code>), and labiodental tuck (<code>/f, v/</code>) is driven directly by <code>tts.wasm</code> visemes.</p>
+      </div>
+      <div class="card">
+        <h3>Embedded AIML XML Brain</h3>
+        <p>Click <strong>💬 Ask</strong> on the companion to test pattern matching, wildcards, memory (<em>"My name is Alex"</em>), and quick chips.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Standalone bot.computer Embed SDK -->
+  <script src="./embed/bot-embed.js" data-manual="true"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", async () => {
+      const bot = await window.BotComputer.mount({
+        name: "Aria",
+        role: "AcmeCloud Concierge",
+        company: "AcmeCloud",
+        wasmUrl: "./vendor/tts/tts.wasm",
+        position: "bottom-right",
+        size: "standard",
+        chatEnabled: true,
+        eyeTracking: true,
+        showCaptions: true,
+      });
+
+      document.getElementById("trigPitch").onclick = () => {
+        bot.say("[cheerful] Welcome to AcmeCloud! I run 100 percent in your browser with WebAssembly vocal tract physics and zero API bills!", "wave");
+      };
+      document.getElementById("trigAskPrice").onclick = () => {
+        bot.ask("Pricing & Plans");
+      };
+      document.getElementById("trigSing").onclick = () => {
+        bot.ask("Sing me a song!");
+      };
+    });
+  </script>
+</body>
+</html>
