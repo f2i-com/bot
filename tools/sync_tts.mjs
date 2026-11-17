@@ -20,6 +20,30 @@ if (!ttsDir) {
   );
 }
 
+const outDir = path.join(botRoot, "vendor", "tts");
+const versionFile = path.join(outDir, "VERSION");
+
+// Never replace a newer vendored build with an older local checkout. `vendor/tts/VERSION` records
+// which tts release is vendored; pass --force to copy the local build regardless.
+const versionOf = (text) => (/^\s*version\s*=\s*"([^"]+)"/m.exec(text) || [])[1] || "";
+const asNumbers = (v) => String(v).trim().split(".").map((n) => parseInt(n, 10) || 0);
+const isOlder = (a, b) => {
+  const [x, y] = [asNumbers(a), asNumbers(b)];
+  for (let i = 0; i < 3; i++) {
+    if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0);
+  }
+  return false;
+};
+const localVersion = versionOf(fs.readFileSync(path.join(ttsDir, "Cargo.toml"), "utf8"));
+const vendoredVersion = fs.existsSync(versionFile) ? fs.readFileSync(versionFile, "utf8").trim() : "";
+if (!process.argv.includes("--force") && localVersion && vendoredVersion && isOlder(localVersion, vendoredVersion)) {
+  console.log(
+    `[sync-tts] Skipped: the tts checkout in ${ttsDir} is v${localVersion}, older than the vendored v${vendoredVersion}. ` +
+      `Update that checkout, or run with --force to copy it anyway.`
+  );
+  process.exit(0);
+}
+
 const pkgWasm = path.join(ttsDir, "pkg", "tts.wasm");
 if (!fs.existsSync(pkgWasm)) {
   console.log(`[sync-tts] pkg/tts.wasm not found in ${ttsDir}; building via tools/build_wasm.mjs...`);
@@ -29,7 +53,6 @@ if (!fs.existsSync(pkgWasm)) {
   });
 }
 
-const outDir = path.join(botRoot, "vendor", "tts");
 const outProfiles = path.join(outDir, "profiles");
 fs.mkdirSync(outProfiles, { recursive: true });
 
@@ -45,6 +68,8 @@ if (fs.existsSync(profilesSrc)) {
     }
   }
 }
+
+if (localVersion) fs.writeFileSync(versionFile, `${localVersion}\n`);
 
 const wasmStat = fs.statSync(path.join(outDir, "tts.wasm"));
 console.log(

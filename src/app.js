@@ -6,6 +6,10 @@ import {
   GLASSES_STYLES,
   FACIAL_HAIR_STYLES,
   POSTURE_STYLES,
+  EARRING_STYLES,
+  HEADWEAR_STYLES,
+  NECKWEAR_STYLES,
+  AVATAR_ACTIONS,
   DEFAULT_AVATAR,
   AVATAR_PRESETS,
   createAnimState,
@@ -13,6 +17,10 @@ import {
   stepAvatarPhysics,
   drawBotAvatar,
   triggerAvatarEmote,
+  setAvatarMood,
+  buildCueTimeline,
+  estimateCueTimeline,
+  runDueCues,
   getSculptHandles,
   hitTestSculptHandle,
 } from "./avatar-renderer.js";
@@ -22,6 +30,11 @@ import {
   inspectAimlXml,
   appendAimlRule,
   stripSpeechTags,
+  parseSpeechCues,
+  captionForSpokenWord,
+  BASE_AIML_XML,
+  BOT_FACTS,
+  removeAimlRule,
 } from "./aiml-engine.js";
 import { mountBotWidget } from "./embed-widget-core.js";
 import {
@@ -57,6 +70,15 @@ const BODY_SLIDERS = [
 const SKIN_MATERIAL_SLIDERS = [
   ["blushIntensity", "Blush", 0, 0.55, 0.01, ""],
   ["synthFinish", "Android finish", 0, 1, 0.02, ""],
+  ["freckles", "Freckles", 0, 1, 0.02, ""],
+  ["eyeshadow", "Eyeshadow", 0, 1, 0.02, ""],
+  ["ageLines", "Age lines", 0, 1, 0.02, ""],
+];
+
+const EXPRESSION_SLIDERS = [
+  ["restSmile", "Resting smile", -0.4, 1, 0.02, ""],
+  ["browMood", "Brows: stern to soft", -1, 1, 0.02, ""],
+  ["eyeOpen", "Eyes: sleepy to wide", -0.5, 0.5, 0.02, ""],
 ];
 
 const HEAD_SLIDERS = [
@@ -86,6 +108,7 @@ const VOICE_SLIDERS = [
   ["tractLengthCm", "Vocal tract length", 12.4, 21.0, 0.1, " cm"],
   ["speed", "Speaking rate", 0.60, 1.65, 0.01, "×"],
   ["expressiveness", "Inflection", 0, 2.2, 0.02, ""],
+  ["laughter", "Laughing while speaking", 0, 1, 0.01, ""],
   ["warmth", "Warmth", 0, 1, 0.01, ""],
   ["breathiness", "Breathiness", 0, 0.75, 0.01, ""],
   ["crispness", "Consonant crispness", 0.5, 1.55, 0.01, ""],
@@ -159,6 +182,8 @@ const state = {
   company: "bot.computer",
   greeting: AVATAR_PRESETS[0].greeting,
   chatEnabled: true,
+  baseBrain: true, // everyday small talk underneath the bot's own AIML rules
+  facts: {}, // about, hours, email, phone, address, pricing: answered by the base brain
   aimlPackId: "concierge",
   aimlXml: STARTER_AIML_PACKS.concierge.xml,
   avatar: structuredClone(AVATAR_PRESETS[0].avatar),
@@ -177,6 +202,25 @@ const state = {
   },
 };
 
+/** Keeps only the known business facts, as trimmed strings. */
+function cleanFacts(raw) {
+  const out = {};
+  if (raw && typeof raw === "object") {
+    for (const { key } of BOT_FACTS) {
+      const value = typeof raw[key] === "string" ? raw[key].trim().slice(0, 400) : "";
+      if (value) out[key] = value;
+    }
+  }
+  return out;
+}
+
+/** What the bot knows about itself: its identity plus any business facts that are filled in. */
+function studioBotProps() {
+  const props = { name: state.name, role: state.role, company: state.company, website: "https://bot.computer" };
+  for (const { key } of BOT_FACTS) props[key] = state.facts[key] || "";
+  return props;
+}
+
 let ttsReady = false;
 let ttsFailed = false;
 const arcticCache = new Map();
@@ -187,7 +231,7 @@ let heroVoice = null;
 let heroAiml = new AIMLEngine();
 const heroAnim = createAnimState();
 const heroPointer = { nx: 0, ny: 0, active: false };
-const heroAudio = { ctx: null, src: null, speech: null, startAt: 0, playing: false };
+const heroAudio = { ctx: null, src: null, speech: null, startAt: 0, playing: false, cueTimeline: null, silentCueStartMs: 0, anim: heroAnim };
 let heroCaption = { words: [], labels: [], chunks: [], chunkIdx: -1, key: "" };
 
 // Studio runtime
@@ -195,7 +239,7 @@ let studioVoice = null;
 let studioAiml = new AIMLEngine();
 const studioAnim = createAnimState();
 const studioPointer = { nx: 0, ny: 0, active: false };
-const studioAudio = { ctx: null, src: null, speech: null, startAt: 0, playing: false };
+const studioAudio = { ctx: null, src: null, speech: null, startAt: 0, playing: false, cueTimeline: null, silentCueStartMs: 0, anim: studioAnim };
 let previewWidgetHandle = null;
 let previewSyncTimer = 0;
 let previewMountSeq = 0;
@@ -343,6 +387,8 @@ function snapshotStudio() {
     company: state.company,
     greeting: state.greeting,
     chatEnabled: state.chatEnabled,
+    baseBrain: state.baseBrain,
+    facts: state.facts,
     aimlPackId: state.aimlPackId,
     aimlXml: state.aimlXml,
     avatar: state.avatar,
@@ -376,6 +422,8 @@ function applyConfigObject(cfg) {
   state.company = str(cfg.company, 60) ?? state.company;
   if (typeof cfg.greeting === "string") state.greeting = cfg.greeting;
   if (cfg.chatEnabled !== undefined) state.chatEnabled = Boolean(cfg.chatEnabled);
+  state.baseBrain = cfg.baseBrain === undefined ? true : Boolean(cfg.baseBrain);
+  state.facts = cleanFacts(cfg.facts);
   if (cfg.avatar && typeof cfg.avatar === "object") state.avatar = { ...DEFAULT_AVATAR, ...cfg.avatar };
   if (typeof cfg.aimlXml === "string" && cfg.aimlXml.trim()) state.aimlXml = cfg.aimlXml;
   state.aimlPackId = typeof cfg.aimlPackId === "string" ? cfg.aimlPackId : "";
@@ -556,12 +604,40 @@ function stopChannel(chan, onStopUi) {
   }
   chan.playing = false;
   chan.speech = null;
+  chan.cueTimeline = null;
+  chan.silentCueStartMs = 0;
+  if (chan.anim) setAvatarMood(chan.anim, "");
   if (onStopUi) onStopUi();
 }
 
-async function playOnChannel(chan, voiceInst, rawText, { onStart, onEnd } = {}) {
-  if (!voiceInst || !String(rawText).trim()) return null;
+/** Plays a line's gestures without audio, paced at reading speed (voice not ready, or a line that is only actions). */
+function playCuesSilently(chan, cues) {
+  chan.cueTimeline = estimateCueTimeline(cues);
+  chan.silentCueStartMs = performance.now();
+}
+
+/** Called every frame for a channel that is not playing audio. */
+function runSilentCues(chan, nowMs) {
+  if (!chan.cueTimeline || !chan.silentCueStartMs) return;
+  runDueCues(chan.anim, chan.cueTimeline, (performance.now() - chan.silentCueStartMs) / 1000, nowMs);
+  if (chan.cueTimeline.next >= chan.cueTimeline.items.length) {
+    chan.cueTimeline = null;
+    chan.silentCueStartMs = 0;
+  }
+}
+
+/**
+ * Speaks `rawText` on a channel. Inline avatar actions (`[wave]`, `[wink]`, ...) are taken out of the
+ * speech and scheduled against the synthesizer's word timings; pass `cues` when they are already parsed.
+ */
+async function playOnChannel(chan, voiceInst, rawText, { cues = null, cueWords = 0, onStart, onEnd } = {}) {
+  const parsed = cues ? { speechText: String(rawText), cues, wordCount: cueWords } : parseSpeechCues(rawText);
   stopChannel(chan);
+  // A line can be all sound and no words ("[laugh]"): that is still something for the voice to do.
+  if (!voiceInst || !(stripSpeechTags(parsed.speechText) || parsed.cues.some((c) => c.sound))) {
+    playCuesSilently(chan, parsed.cues);
+    return null;
+  }
 
   const Ctx = window.AudioContext || window.webkitAudioContext;
   chan.ctx ??= new Ctx();
@@ -570,13 +646,16 @@ async function playOnChannel(chan, voiceInst, rawText, { onStart, onEnd } = {}) 
   }
 
   const t0 = performance.now();
-  const textStr = String(rawText);
+  const textStr = parsed.speechText;
   const speech = /\[[a-zA-Z_/]/.test(textStr)
     ? voiceInst.speakScript(textStr)
     : voiceInst.speak(textStr);
   const synthMs = Math.max(0.2, performance.now() - t0);
 
-  if (!speech || !speech.samples || !speech.samples.length) return null;
+  if (!speech || !speech.samples || !speech.samples.length) {
+    playCuesSilently(chan, parsed.cues);
+    return null;
+  }
 
   const buffer = chan.ctx.createBuffer(1, speech.samples.length, speech.sampleRate);
   buffer.copyToChannel(speech.samples, 0);
@@ -586,12 +665,18 @@ async function playOnChannel(chan, voiceInst, rawText, { onStart, onEnd } = {}) 
 
   chan.src = src;
   chan.speech = speech;
+  chan.cueTimeline = buildCueTimeline(speech, parsed.cues, parsed.wordCount);
+  chan.silentCueStartMs = 0;
   chan.startAt = chan.ctx.currentTime + 0.015;
   chan.playing = true;
 
   if (onStart) onStart(speech, synthMs);
   src.start(chan.startAt);
   src.onended = () => {
+    // Fire anything still pending (a gesture written at the very end of the line), then relax the face.
+    runDueCues(chan.anim, chan.cueTimeline, Infinity);
+    chan.cueTimeline = null;
+    if (chan.anim) setAvatarMood(chan.anim, "");
     chan.playing = false;
     chan.speech = null;
     chan.src = null;
@@ -661,7 +746,12 @@ async function selectHeroPersona(idx, speakGreeting = false) {
   heroAiml = new AIMLEngine({
     botProps: { name: preset.name, role: preset.role, company: "bot.computer", website: "https://bot.computer" },
     xml: STARTER_AIML_PACKS.concierge.xml,
+    baseXml: BASE_AIML_XML,
   });
+
+  // Get the matcher up to speed before the first question is typed.
+  const warming = heroAiml;
+  setTimeout(() => warming.warmUp(), 300);
 
   $("heroChatLog").replaceChildren();
   addChatBubble($("heroChatLog"), "bot", stripSpeechTags(preset.greeting));
@@ -680,7 +770,8 @@ async function selectHeroPersona(idx, speakGreeting = false) {
 function prepareHeroCaption(speech) {
   const words = speech.words || [];
   const tokens = String(speech.text || "").split(/\s+/).filter(Boolean);
-  const labels = tokens.length === words.length ? tokens : words.map((w) => w.word);
+  // A sound the voice makes is reported as "[laugh]"; the caption says "(laughs)".
+  const labels = (tokens.length === words.length ? tokens : words.map((w) => w.word)).map(captionForSpokenWord);
   const chunks = [];
   let cur = [];
   labels.forEach((label, i) => {
@@ -737,13 +828,16 @@ function updateHeroCaption(tSec) {
   }
 }
 
-function speakHeroLine(text, emote = "") {
-  if (emote) triggerAvatarEmote(heroAnim, emote, 2400);
+function speakHeroLine(text, emote = "", cueOpts = {}) {
+  if (emote) triggerAvatarEmote(heroAnim, emote);
   if (!heroVoice) {
     toast(voiceUnavailableMessage(), { error: ttsFailed });
+    stopChannel(heroAudio);
+    playCuesSilently(heroAudio, cueOpts.cues || parseSpeechCues(text).cues);
     return;
   }
   playOnChannel(heroAudio, heroVoice, text, {
+    ...cueOpts,
     onStart(speech) {
       prepareHeroCaption(speech);
       setBtn($("heroSpeakBtn"), { icon: "stop", label: "Stop" });
@@ -755,16 +849,42 @@ function speakHeroLine(text, emote = "") {
   });
 }
 
+/** Runs `fn` once the browser has painted, so new text is on screen before heavier work starts. */
+function afterPaint(fn) {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    fn();
+  };
+  requestAnimationFrame(() => setTimeout(run, 0));
+  setTimeout(run, 80); // animation frames do not fire in a background tab
+}
+
+/** Wakes a channel's audio output; called inside the click or key press that asked for sound. */
+function unlockChannelAudio(chan) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  chan.ctx ??= new Ctx();
+  if (chan.ctx.state === "suspended") chan.ctx.resume().catch(() => {});
+}
+
+// Matching a question takes about a millisecond, so the answer is on screen the moment Send is
+// pressed. The voice (a few more milliseconds to render) starts right after that first paint.
 function askHeroBot(question) {
   const q = String(question || "").trim();
   if (!q) return;
-  addChatBubble($("heroChatLog"), "user", q);
-  const res = heroAiml.reply(q);
-  addChatBubble($("heroChatLog"), "bot", res.displayText);
-  if (res.chips && res.chips.length) {
-    renderQuickChipBar($("heroQuickChips"), res.chips, (nextQ) => askHeroBot(nextQ));
-  }
-  speakHeroLine(res.speechText, res.emote || "");
+  const log = $("heroChatLog");
+  const engine = heroAiml;
+  addChatBubble(log, "user", q);
+  const res = engine.reply(q);
+  addChatBubble(log, "bot", res.displayText);
+  renderQuickChipBar($("heroQuickChips"), res.chips.length ? res.chips : engine.quickChips, (nextQ) => askHeroBot(nextQ));
+  unlockChannelAudio(heroAudio);
+  afterPaint(() => {
+    if (engine !== heroAiml) return; // the persona was switched in the meantime
+    speakHeroLine(res.speechText, "", { cues: res.cues, cueWords: res.cueWords });
+  });
 }
 
 function toggleHeroGreeting() {
@@ -802,7 +922,7 @@ function initHeroSection() {
   });
 
   $("heroWaveBtn").onclick = () => {
-    triggerAvatarEmote(heroAnim, "wave", 2400);
+    triggerAvatarEmote(heroAnim, "wave");
   };
 
   $("heroChatForm").onsubmit = (e) => {
@@ -999,6 +1119,18 @@ function syncAllAvatarControls() {
   $("glassesColorPicker").value = av.glassesColor || "#1f2430";
   $("headsetMicCheck").checked = Boolean(av.headsetMic);
   $("nameBadgeCheck").checked = Boolean(av.nameBadge);
+  $("headwearSelect").value = av.headwear || "none";
+  $("headwearColorPicker").value = av.headwearColor || "#b4452f";
+  $("earringsSelect").value = av.earrings || "none";
+  $("earringColorPicker").value = av.earringColor || "#e6c35c";
+  $("neckwearSelect").value = av.neckwear || "none";
+  $("neckwearColorPicker").value = av.neckwearColor || "#d9a441";
+  $("fringeCheck").checked = Boolean(av.fringe);
+  $("beautyMarkCheck").checked = Boolean(av.beautyMark);
+  $("eyeshadowColorPicker").value = av.eyeshadowColor || "#7a5c8f";
+  // An empty brow color means "follow the hair", so show the hair color until one is picked.
+  $("browColorPicker").value = av.browColor || av.hairColor || "#3c2734";
+  $("browMatchHairBtn").disabled = !av.browColor;
 
   for (const btn of $("hairStylePills").children) {
     const on = btn.dataset.val === av.hairStyle;
@@ -1028,6 +1160,10 @@ function syncIdentityControls() {
   $("botCompanyInput").value = state.company;
   $("botGreetingInput").value = state.greeting;
   $("chatEnabledCheck").checked = state.chatEnabled;
+  $("baseBrainCheck").checked = state.baseBrain;
+  for (const input of document.querySelectorAll("input[data-fact]")) {
+    input.value = state.facts[input.dataset.fact] || "";
+  }
   $("aimlXmlEditor").value = state.aimlXml;
   for (const btn of $("aimlPackPills").children) {
     const on = btn.dataset.packId === state.aimlPackId;
@@ -1208,24 +1344,37 @@ function resetStudioSpeakUi() {
   setBtn($("mobileQuickSpeakBtn"), { icon: "play", label: "Speak" });
 }
 
-function speakStudioLine(text, emote = "") {
-  if (emote) triggerAvatarEmote(studioAnim, emote, 2400);
-  if (!studioVoice) {
-    setStudioStatus(voiceUnavailableMessage());
-    return;
-  }
+function speakStudioLine(text, emote = "", cueOpts = {}) {
+  if (emote) triggerAvatarEmote(studioAnim, emote);
   const raw = String(text || "");
-  if (!stripSpeechTags(raw)) {
+  const parsed = cueOpts.cues
+    ? { speechText: raw, cues: cueOpts.cues, wordCount: cueOpts.cueWords || 0 }
+    : parseSpeechCues(raw);
+  // Words, or a sound the voice makes such as "[laugh]": either is something to hear.
+  const hasWords = Boolean(stripSpeechTags(parsed.speechText)) || parsed.cues.some((c) => c.sound);
+  const actionCount = parsed.cues.filter((c) => c.type === "action").length;
+
+  if (!hasWords && !actionCount) {
     setStudioStatus("Type a line for the bot to say first.");
     return;
   }
-  playOnChannel(studioAudio, studioVoice, raw, {
+  if (!studioVoice || !hasWords) {
+    // No voice yet, or a line made only of actions: play the gestures on their own.
+    stopChannel(studioAudio, resetStudioSpeakUi);
+    playCuesSilently(studioAudio, parsed.cues);
+    setStudioStatus(hasWords ? voiceUnavailableMessage() : "Played the actions. Add some words to hear them spoken.");
+    return;
+  }
+  playOnChannel(studioAudio, studioVoice, parsed.speechText, {
+    cues: parsed.cues,
+    cueWords: parsed.wordCount,
     onStart(speech, synthMs) {
       setBtn($("studioSpeakBtn"), { label: "Replay" });
       $("studioStopBtn").disabled = false;
       setBtn($("mobileQuickSpeakBtn"), { icon: "stop", label: "Stop" });
       const rtf = Math.max(1, Math.round(speech.duration / (synthMs / 1000)));
-      setStudioStatus(`Rendered ${speech.duration.toFixed(2)} s of speech in ${synthMs.toFixed(1)} ms (${rtf}× real time, 200 Hz visemes)`);
+      const actions = actionCount ? `, ${actionCount} ${actionCount === 1 ? "action" : "actions"}` : "";
+      setStudioStatus(`Rendered ${speech.duration.toFixed(2)} s of speech in ${synthMs.toFixed(1)} ms (${rtf}× real time${actions})`);
     },
     onEnd: resetStudioSpeakUi,
   })
@@ -1238,60 +1387,102 @@ function speakStudioLine(text, emote = "") {
     });
 }
 
-function randomizeEverything() {
-  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-  const rand = (lo, hi) => Number((lo + Math.random() * (hi - lo)).toFixed(2));
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const randBetween = (lo, hi) => Number((lo + Math.random() * (hi - lo)).toFixed(2));
 
-  const gStyle = pick(["feminine", "masculine", "neutral"]);
-  const vGender = gStyle === "masculine" ? "male" : gStyle === "feminine" ? "female" : pick(["female", "male"]);
-  const skin = pick(SKIN_TONES.slice(0, 9));
-  const hair = pick(HAIR_STYLES);
-  const hairCol = pick(HAIR_PALETTE);
-  const outfit = pick(OUTFIT_STYLES);
-  const outPrimary = pick(["#1e2f4d", "#0f766e", "#3b234a", "#1e293b", "#5b3e31", "#1d4ed8", "#3f3f46"]);
-  const outAccent = pick(["#38bdf8", "#2dd4bf", "#f59e0b", "#fb7185", "#a78bfa", "#34d399"]);
-
-  Object.assign(state.avatar, {
+function randomFaceTraits(gStyle) {
+  return {
     genderStyle: gStyle,
-    skinColor: skin.hex,
-    synthFinish: outfit.id === "cyber" ? 0.75 : 0,
-    headWidth: rand(0.88, 1.12),
-    headHeight: rand(0.92, 1.10),
-    cheekboneWidth: rand(0.90, 1.14),
-    jawWidth: rand(0.82, 1.16),
-    chinLength: rand(-0.15, 0.22),
-    chinRoundness: rand(0.25, 0.88),
-    neckLength: rand(0.88, 1.16),
-    neckWidth: rand(0.82, 1.16),
-    shoulderWidth: rand(0.82, 1.26),
-    shoulderSlope: rand(-0.14, 0.24),
-    chestWidth: rand(0.82, 1.20),
-    waistWidth: rand(0.66, 1.08),
-    hipWidth: rand(0.82, 1.16),
-    armThickness: rand(0.82, 1.18),
-    posture: pick(POSTURE_STYLES).id,
-    eyeSize: rand(0.88, 1.18),
-    eyeSpacing: rand(0.90, 1.12),
-    eyeTilt: rand(-0.08, 0.16),
+    skinColor: pick(SKIN_TONES.slice(0, 9)).hex,
+    blushIntensity: randBetween(0.08, 0.36),
+    freckles: Math.random() < 0.25 ? randBetween(0.3, 0.9) : 0,
+    ageLines: Math.random() < 0.2 ? randBetween(0.3, 0.9) : 0,
+    beautyMark: Math.random() < 0.12,
+    eyeshadow: gStyle === "feminine" && Math.random() < 0.4 ? randBetween(0.3, 0.8) : 0,
+    eyeshadowColor: pick(["#7a5c8f", "#8b5a2b", "#1f9e8f", "#b0577e", "#4a5d8f"]),
+    headWidth: randBetween(0.88, 1.12),
+    headHeight: randBetween(0.92, 1.10),
+    cheekboneWidth: randBetween(0.90, 1.14),
+    jawWidth: randBetween(0.82, 1.16),
+    chinLength: randBetween(-0.15, 0.22),
+    chinRoundness: randBetween(0.25, 0.88),
+    eyeSize: randBetween(0.88, 1.18),
+    eyeSpacing: randBetween(0.90, 1.12),
+    eyeTilt: randBetween(-0.08, 0.16),
     irisColor: pick(IRIS_PALETTE),
     lashStyle: gStyle === "feminine" ? "lush" : pick(["subtle", "classic"]),
-    browThickness: rand(0.75, 1.38),
-    browArch: rand(0.0, 0.42),
-    noseLength: rand(0.88, 1.14),
-    noseWidth: rand(0.86, 1.16),
-    mouthWidth: rand(0.88, 1.14),
-    lipFullness: rand(0.80, 1.28),
+    browThickness: randBetween(0.75, 1.38),
+    browArch: randBetween(0.0, 0.42),
+    browColor: "",
+    noseLength: randBetween(0.88, 1.14),
+    noseWidth: randBetween(0.86, 1.16),
+    mouthWidth: randBetween(0.88, 1.14),
+    lipFullness: randBetween(0.80, 1.28),
     lipColor: pick(LIP_PALETTE),
-    hairStyle: hair.id,
-    hairColor: hairCol,
+    restSmile: randBetween(-0.1, 0.6),
+    browMood: randBetween(-0.4, 0.6),
+    eyeOpen: randBetween(-0.15, 0.2),
+  };
+}
+
+function randomStyleTraits(masculine) {
+  const outfit = pick(OUTFIT_STYLES);
+  const traits = {
+    hairStyle: pick(HAIR_STYLES).id,
+    hairColor: pick(HAIR_PALETTE),
     hairHighlight: "#94a3b8",
-    facialHair: vGender === "male" ? pick(["none", "none", "stubble", "beard", "mustache"]) : "none",
+    facialHair: masculine ? pick(["none", "none", "stubble", "beard", "mustache"]) : "none",
     outfitStyle: outfit.id,
-    outfitPrimary: outPrimary,
-    outfitAccent: outAccent,
-    glasses: pick(["none", "none", "classic", "round", "bold"]),
+    outfitPrimary: pick(["#1e2f4d", "#0f766e", "#3b234a", "#1e293b", "#5b3e31", "#1d4ed8", "#3f3f46"]),
+    outfitAccent: pick(["#38bdf8", "#2dd4bf", "#f59e0b", "#fb7185", "#a78bfa", "#34d399"]),
+    glasses: pick(["none", "none", "none", "classic", "round", "bold", "cat_eye", "aviator"]),
     headsetMic: Math.random() < 0.45,
-  });
+    headwear:
+      Math.random() < 0.22
+        ? pick(masculine ? ["beanie", "cap", "headphones", "beret"] : ["beanie", "cap", "headband", "beret", "headphones", "headscarf"])
+        : "none",
+    neckwear: Math.random() < 0.3 ? pick(["necklace", "bowtie", "scarf", "lanyard"]) : "none",
+    neckwearColor: pick(["#d9a441", "#c9d3e0", "#b4452f", "#1a5fe6", "#2f6f5e", "#e04a6b"]),
+    fringe: Math.random() < 0.2,
+    headwearColor: pick(["#b4452f", "#1d4ed8", "#2f6f5e", "#3f3f46", "#6b46c1", "#e04a6b"]),
+    earrings: Math.random() < 0.35 ? pick(["studs", "hoops", "drops"]) : "none",
+    earringColor: pick(["#e6c35c", "#d8dde6", "#9ad0ff"]),
+  };
+  if (outfit.id === "cyber") traits.synthFinish = 0.75;
+  return traits;
+}
+
+function randomBodyTraits() {
+  return {
+    neckLength: randBetween(0.88, 1.16),
+    neckWidth: randBetween(0.82, 1.16),
+    shoulderWidth: randBetween(0.82, 1.26),
+    shoulderSlope: randBetween(-0.14, 0.24),
+    chestWidth: randBetween(0.82, 1.20),
+    waistWidth: randBetween(0.66, 1.08),
+    hipWidth: randBetween(0.82, 1.16),
+    armThickness: randBetween(0.82, 1.18),
+    posture: pick(POSTURE_STYLES).id,
+  };
+}
+
+function randomizeFace() {
+  Object.assign(state.avatar, randomFaceTraits(pick(["feminine", "masculine", "neutral"])));
+  commitAvatarChange();
+  triggerAvatarEmote(studioAnim, "smile");
+}
+
+function randomizeStyle() {
+  Object.assign(state.avatar, randomStyleTraits(state.avatar.genderStyle === "masculine"));
+  commitAvatarChange();
+  triggerAvatarEmote(studioAnim, "nod");
+}
+
+function randomizeEverything() {
+  const gStyle = pick(["feminine", "masculine", "neutral"]);
+  const vGender = gStyle === "masculine" ? "male" : gStyle === "feminine" ? "female" : pick(["female", "male"]);
+
+  Object.assign(state.avatar, { synthFinish: 0 }, randomFaceTraits(gStyle), randomBodyTraits(), randomStyleTraits(vGender === "male"));
 
   if (studioVoice) {
     studioVoice.randomize({ gender: vGender });
@@ -1300,31 +1491,127 @@ function randomizeEverything() {
   }
 
   commitAvatarChange();
-  speakStudioLine(`[cheerful] Hello! I was just sculpted with a brand new vocal tract and body build!`, "wave");
+  speakStudioLine("[cheerful] Hello! [wave] I was just sculpted with a brand new vocal tract and body build! [wink]");
 }
 
 // ============================================================================
 // 3. AIML studio and live chat tester
 // ============================================================================
 
+/** Scrolls the AIML editor to a line and selects it. */
+function revealEditorLine(line) {
+  const editor = $("aimlXmlEditor");
+  const lines = editor.value.split("\n");
+  const idx = Math.max(0, Math.min(lines.length - 1, line - 1));
+  let from = 0;
+  for (let i = 0; i < idx; i++) from += lines[i].length + 1;
+  editor.focus({ preventScroll: true });
+  editor.setSelectionRange(from, from + lines[idx].length);
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 19;
+  editor.scrollTop = Math.max(0, (idx - 2) * lineHeight);
+  editor.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+/** Lists the rules in the AIML document with what each one answers, plus anything the checker noticed. */
+function renderRuleInsights(info) {
+  const warnHost = $("aimlWarnings");
+  warnHost.replaceChildren();
+  warnHost.hidden = !info.valid || !info.warnings.length;
+  for (const w of info.warnings) {
+    const li = document.createElement("li");
+    const where = document.createElement("button");
+    where.type = "button";
+    where.className = "lint-line";
+    where.textContent = `Line ${w.line}`;
+    where.title = "Show this line in the editor";
+    where.onclick = () => revealEditorLine(w.line);
+    const text = document.createElement("span");
+    text.textContent = w.message;
+    li.append(where, text);
+    warnHost.appendChild(li);
+  }
+  if (!info.valid) return; // the last good list stays up while the XML is being fixed
+
+  $("aimlRuleCount").textContent = String(info.rules.length);
+  const list = $("aimlRuleList");
+  list.replaceChildren();
+  for (const rule of info.rules) {
+    const li = document.createElement("li");
+    li.className = "rule-row";
+
+    const text = document.createElement("div");
+    text.className = "rule-text";
+    const pattern = document.createElement("code");
+    pattern.className = "rule-pattern";
+    pattern.textContent = rule.isCatchAll ? "anything else" : rule.pattern.toLowerCase();
+    pattern.title = rule.pattern;
+    const preview = document.createElement("span");
+    preview.className = "rule-preview";
+    const context =
+      rule.that !== "*" ? `After “${rule.that.toLowerCase()}”: ` : rule.topic !== "*" ? `Topic ${rule.topic.toLowerCase()}: ` : "";
+    preview.textContent =
+      context + (rule.aliasOf ? `Same answer as “${rule.aliasOf.toLowerCase()}”` : rule.preview || "(no spoken text)");
+    text.append(pattern, preview);
+
+    const actions = document.createElement("div");
+    actions.className = "rule-actions";
+    const mkBtn = (label, title) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn xs";
+      btn.textContent = label;
+      btn.title = title;
+      return btn;
+    };
+    const standalone = !rule.isCatchAll && rule.that === "*" && rule.topic === "*";
+    const sample = standalone ? rule.sample : "";
+    const tryBtn = mkBtn("Try", sample ? `Ask “${sample}” in the test chat` : "This rule only answers in the middle of a conversation");
+    tryBtn.disabled = !sample;
+    tryBtn.onclick = () => {
+      askStudioBot(sample);
+      $("studioChatMessages").scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    const findBtn = mkBtn("Find", `Show line ${rule.line} in the editor`);
+    findBtn.onclick = () => revealEditorLine(rule.line);
+    const removeBtn = mkBtn("Remove", "Delete this rule");
+    armConfirm(removeBtn, "Sure?", () => {
+      state.aimlXml = removeAimlRule(state.aimlXml, rule.start);
+      state.aimlPackId = "";
+      syncIdentityControls();
+      rebuildStudioAiml();
+      schedulePreviewSync();
+      toast("Rule removed");
+    });
+    actions.append(tryBtn, findBtn, removeBtn);
+
+    li.append(text, actions);
+    list.appendChild(li);
+  }
+}
+
+let studioWarmTimer = 0;
+let fillSoundBars = () => {}; // set once the controls are built; run when the voice engine is ready
+
 function rebuildStudioAiml() {
-  const botProps = {
-    name: state.name,
-    role: state.role,
-    company: state.company,
-    website: "https://bot.computer",
-  };
-  const info = inspectAimlXml(state.aimlXml, botProps);
+  const botProps = studioBotProps();
+  const info = inspectAimlXml(state.aimlXml, botProps, { baseXml: state.baseBrain ? BASE_AIML_XML : "" });
   const badge = $("aimlValidBadge");
   const note = $("aimlErrorNote");
   const editor = $("aimlXmlEditor");
+  // Business facts are answered by the base brain, so they need it switched on.
+  $("factsHost").classList.toggle("is-dimmed", !state.baseBrain);
+  $("factsNeedBaseNote").hidden = state.baseBrain;
+  renderRuleInsights(info);
   if (info.valid) {
     badge.className = "status-pill ok";
-    badge.textContent = `Valid AIML, ${info.categories} ${info.categories === 1 ? "pattern" : "patterns"}`;
+    const checks = info.warnings.length ? `, ${info.warnings.length} to check` : "";
+    badge.textContent = `Valid AIML, ${info.categories} ${info.categories === 1 ? "rule" : "rules"}${checks}`;
     note.hidden = true;
     editor.classList.remove("has-error");
     editor.removeAttribute("aria-invalid");
-    studioAiml = new AIMLEngine({ botProps, xml: state.aimlXml });
+    studioAiml = info.engine; // the engine the checker just built: your rules over the base brain
+    clearTimeout(studioWarmTimer);
+    studioWarmTimer = setTimeout(() => studioAiml.warmUp(), 400);
     renderQuickChipBar($("studioChatChips"), studioAiml.quickChips, (q) => askStudioBot(q));
   } else {
     badge.className = "status-pill err";
@@ -1337,17 +1624,34 @@ function rebuildStudioAiml() {
   return info;
 }
 
+/** Explains in the tester which rule answered, and from which layer. */
+function describeMatch(res) {
+  if (!res.matchedPattern) return "no rule matched";
+  const where = res.matchedLayer === "base" ? "base brain" : "your rules";
+  if (res.matchKind === "fallback") return `nothing matched, so the catch-all answered (${where})`;
+  const how =
+    {
+      typo: ", after fixing a typo",
+      synonym: ", same idea in other words",
+      loose: ", close match",
+      meaning: ", closest rule by meaning",
+      chat: ", open conversation",
+      followup: ", continuing the last question",
+    }[res.matchKind] || "";
+  return `matched ${res.matchedPattern} (${where}${how})`;
+}
+
 function askStudioBot(question) {
   const q = String(question || "").trim();
   if (!q) return;
-  addChatBubble($("studioChatMessages"), "user", q);
-  const res = studioAiml.reply(q);
-  const meta = res.matchedPattern ? `matched ${res.matchedPattern}` : "no pattern matched (fallback reply)";
-  addChatBubble($("studioChatMessages"), "bot", res.displayText, meta);
-  if (res.chips && res.chips.length) {
-    renderQuickChipBar($("studioChatChips"), res.chips, (nextQ) => askStudioBot(nextQ));
-  }
-  speakStudioLine(res.speechText, res.emote || "");
+  const log = $("studioChatMessages");
+  const engine = studioAiml;
+  addChatBubble(log, "user", q);
+  const res = engine.reply(q);
+  addChatBubble(log, "bot", res.displayText, describeMatch(res));
+  renderQuickChipBar($("studioChatChips"), res.chips.length ? res.chips : engine.quickChips, (nextQ) => askStudioBot(nextQ));
+  unlockChannelAudio(studioAudio);
+  afterPaint(() => speakStudioLine(res.speechText, "", { cues: res.cues, cueWords: res.cueWords }));
 }
 
 function resetStudioChat() {
@@ -1368,6 +1672,8 @@ function getFullBotExportConfig() {
     company: state.company,
     greeting: state.greeting,
     chatEnabled: state.chatEnabled,
+    baseBrain: state.baseBrain,
+    facts: { ...state.facts },
     position: state.embedOpts.position,
     size: state.embedOpts.size,
     eyeTracking: state.embedOpts.eyeTracking,
@@ -1528,6 +1834,9 @@ function startRenderLoop() {
           const tSec = Math.max(0, heroAudio.ctx.currentTime - heroAudio.startAt);
           sampledHero = sampleSpeechAt(heroAudio.speech, tSec, heroVoice?.settings.pitchHz || 180);
           updateHeroCaption(tSec);
+          runDueCues(heroAnim, heroAudio.cueTimeline, tSec, nowMs);
+        } else {
+          runSilentCues(heroAudio, nowMs);
         }
         const heroPreset = AVATAR_PRESETS[heroPersonaIdx] || AVATAR_PRESETS[0];
         stepAvatarPhysics(heroAnim, nowMs, sampledHero, heroPointer, heroVoice?.settings.pitchHz || 180);
@@ -1566,7 +1875,12 @@ function startRenderLoop() {
         if (studioAudio.playing && studioAudio.speech && studioAudio.ctx) {
           const tSec = Math.max(0, studioAudio.ctx.currentTime - studioAudio.startAt);
           sampledStudio = sampleSpeechAt(studioAudio.speech, tSec, studioVoice?.settings.pitchHz || 160);
+          runDueCues(studioAnim, studioAudio.cueTimeline, tSec, nowMs);
+        } else {
+          runSilentCues(studioAudio, nowMs);
         }
+        // The avatar holds still while a sculpt handle is being used.
+        studioAnim.idleLife = !(state.activeSculptId || state.hoverSculptId);
         stepAvatarPhysics(studioAnim, nowMs, sampledStudio, studioPointer, studioVoice?.settings.pitchHz || 160);
         drawBotAvatar(desCtx, dw, dh, state.avatar, studioAnim, nowMs, {
           showVoiceWaves: true,
@@ -1584,7 +1898,7 @@ function startRenderLoop() {
         const fb = $("liveF0Badge");
         if (studioAnim.word) {
           wb.hidden = false;
-          wb.textContent = studioAnim.word;
+          wb.textContent = captionForSpokenWord(studioAnim.word);
         } else wb.hidden = true;
 
         if (studioAnim.ipa && studioAnim.phone && studioAnim.phone !== "SIL") {
@@ -1659,6 +1973,104 @@ function populateStaticChoices() {
   }
   for (const item of GLASSES_STYLES) {
     $("glassesSelect").add(new Option(item.label, item.id));
+  }
+  for (const item of HEADWEAR_STYLES) {
+    $("headwearSelect").add(new Option(item.label, item.id));
+  }
+  for (const item of EARRING_STYLES) {
+    $("earringsSelect").add(new Option(item.label, item.id));
+  }
+  for (const item of NECKWEAR_STYLES) {
+    $("neckwearSelect").add(new Option(item.label, item.id));
+  }
+
+  // Business facts: one field for each thing the base brain can answer about
+  for (const fact of BOT_FACTS) {
+    const label = document.createElement("label");
+    label.className = `field${fact.long ? " span-all" : ""}`;
+    const caption = document.createElement("span");
+    caption.textContent = fact.label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 400;
+    input.placeholder = fact.placeholder;
+    input.autocomplete = "off";
+    input.dataset.fact = fact.key;
+    input.addEventListener("input", () => {
+      state.facts = cleanFacts({ ...state.facts, [fact.key]: input.value });
+      rebuildStudioAiml();
+      schedulePreviewSync();
+    });
+    label.append(caption, input);
+    $("factsHost").appendChild(label);
+  }
+
+  // Avatar actions: each chip previews the gesture on the stage and inserts its tag at the cursor
+  const insertAtCursor = (field, text) => {
+    const from = field.selectionStart ?? field.value.length;
+    const to = field.selectionEnd ?? field.value.length;
+    field.value = field.value.slice(0, from) + text + field.value.slice(to);
+    field.focus();
+    field.selectionStart = field.selectionEnd = from + text.length;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const fillActionBar = (barId, fieldId) => {
+    for (const action of AVATAR_ACTIONS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mini-tag action";
+      b.textContent = action.label;
+      b.title = `Preview this gesture and insert [${action.id}]`;
+      b.onclick = () => {
+        triggerAvatarEmote(studioAnim, action.id);
+        insertAtCursor($(fieldId), `[${action.id}] `);
+      };
+      $(barId).appendChild(b);
+    }
+  };
+  fillActionBar("actionTagBar", "auditionText");
+  fillActionBar("qaActionBar", "qaAnswerInput");
+
+  // Sounds the voice can make. The list comes from the voice engine itself once it has loaded, so
+  // a newer engine brings its new sounds with it. Each chip plays the sound, with the face that
+  // goes with it, and inserts its tag at the cursor.
+  fillSoundBars = () => {
+    const sounds = typeof TTS.sounds === "function" ? TTS.sounds() : [];
+    for (const [barId, fieldId] of [["soundTagBar", "auditionText"], ["qaSoundBar", "qaAnswerInput"]]) {
+      const bar = $(barId);
+      for (const old of bar.querySelectorAll(".mini-tag")) old.remove();
+      let group = "";
+      for (const sound of sounds) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = `mini-tag sound${sound.group !== group && group ? " group-start" : ""}`;
+        group = sound.group;
+        b.textContent = sound.label;
+        b.title = `${sound.about} Plays it and inserts [${sound.id}]`;
+        b.onclick = () => {
+          insertAtCursor($(fieldId), `[${sound.id}] `);
+          speakStudioLine(`[${sound.id}]`);
+        };
+        bar.appendChild(b);
+      }
+      bar.hidden = !sounds.length;
+    }
+  };
+
+  // The chip rows under the stage scroll sideways; let an ordinary mouse wheel do it.
+  for (const bar of document.querySelectorAll(".audition-box .tag-insert-bar")) {
+    bar.addEventListener(
+      "wheel",
+      (e) => {
+        if (bar.scrollWidth <= bar.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+        bar.scrollLeft += e.deltaY;
+        e.preventDefault();
+      },
+      { passive: false }
+    );
+  }
+  for (const action of AVATAR_ACTIONS) {
+    $("qaEmoteSelect").add(new Option(action.label, action.id));
   }
 
   // Hair and outfit pills
@@ -1759,6 +2171,7 @@ function populateStaticChoices() {
   // Sliders
   buildAvatarSliders("bodySlidersHost", BODY_SLIDERS);
   buildAvatarSliders("skinMaterialSlidersHost", SKIN_MATERIAL_SLIDERS);
+  buildAvatarSliders("expressionSlidersHost", EXPRESSION_SLIDERS);
   buildAvatarSliders("headSlidersHost", HEAD_SLIDERS);
   buildAvatarSliders("featuresSlidersHost", FEATURES_SLIDERS);
   buildVoiceSliders();
@@ -1986,6 +2399,22 @@ function bindStudioEvents() {
   bindAv("glassesColorPicker", "glassesColor");
   bindAv("headsetMicCheck", "headsetMic", true);
   bindAv("nameBadgeCheck", "nameBadge", true);
+  bindAv("headwearSelect", "headwear");
+  bindAv("headwearColorPicker", "headwearColor");
+  bindAv("earringsSelect", "earrings");
+  bindAv("earringColorPicker", "earringColor");
+  bindAv("neckwearSelect", "neckwear");
+  bindAv("neckwearColorPicker", "neckwearColor");
+  bindAv("fringeCheck", "fringe", true);
+  bindAv("beautyMarkCheck", "beautyMark", true);
+  bindAv("eyeshadowColorPicker", "eyeshadowColor");
+  bindAv("browColorPicker", "browColor");
+  $("browMatchHairBtn").onclick = () => {
+    state.avatar.browColor = "";
+    commitAvatarChange();
+  };
+  $("randomizeFaceBtn").onclick = randomizeFace;
+  $("randomizeStyleBtn").onclick = randomizeStyle;
 
   // Voice tab
   for (const btn of $("voiceGenderSeg").querySelectorAll("button")) {
@@ -2023,7 +2452,7 @@ function bindStudioEvents() {
   };
 
   // Speech test and gestures
-  for (const btn of document.querySelectorAll(".mini-tag")) {
+  for (const btn of document.querySelectorAll(".mini-tag[data-ins]")) {
     btn.onclick = () => {
       const ta = $("auditionText");
       const tag = btn.dataset.ins || "";
@@ -2045,9 +2474,6 @@ function bindStudioEvents() {
 
   $("studioSpeakBtn").onclick = () => speakStudioLine($("auditionText").value);
   $("studioStopBtn").onclick = () => stopChannel(studioAudio, resetStudioSpeakUi);
-  for (const btn of document.querySelectorAll(".emote-btn")) {
-    btn.onclick = () => triggerAvatarEmote(studioAnim, btn.dataset.emote, 2400);
-  }
   $("downloadWavBtn").onclick = () => {
     if (!studioVoice) return setStudioStatus(voiceUnavailableMessage());
     const txt = $("auditionText").value.trim() || state.greeting;
@@ -2102,6 +2528,8 @@ function bindStudioEvents() {
     stopChannel(studioAudio, resetStudioSpeakUi);
     state.company = "bot.computer";
     state.chatEnabled = true;
+    state.baseBrain = true;
+    state.facts = {};
     state.aimlPackId = "concierge";
     state.aimlXml = STARTER_AIML_PACKS.concierge.xml;
     Object.assign(state.embedOpts, {
@@ -2126,10 +2554,11 @@ function bindStudioEvents() {
     state.company = $("botCompanyInput").value.trim() || "Our Website";
     state.greeting = $("botGreetingInput").value;
     state.chatEnabled = $("chatEnabledCheck").checked;
+    state.baseBrain = $("baseBrainCheck").checked;
     rebuildStudioAiml();
     schedulePreviewSync();
   };
-  for (const id of ["botNameInput", "botRoleInput", "botCompanyInput", "botGreetingInput", "chatEnabledCheck"]) {
+  for (const id of ["botNameInput", "botRoleInput", "botCompanyInput", "botGreetingInput", "chatEnabledCheck", "baseBrainCheck"]) {
     $(id).addEventListener("input", onIdentityChange);
   }
 
@@ -2164,7 +2593,7 @@ function bindStudioEvents() {
     schedulePreviewSync();
     const editor = $("aimlXmlEditor");
     editor.scrollTop = editor.scrollHeight;
-    toast(info.valid ? `Rule added. The brain now has ${info.categories} patterns.` : "Rule added, but the document has an XML error", {
+    toast(info.valid ? `Rule added. The brain now has ${info.categories} rules.` : "Rule added, but the document has an XML error", {
       error: !info.valid,
     });
   };
@@ -2188,7 +2617,7 @@ function bindStudioEvents() {
     syncIdentityControls();
     const info = rebuildStudioAiml();
     schedulePreviewSync();
-    toast(info.valid ? `Imported ${file.name} with ${info.categories} patterns` : `Imported ${file.name}, but it has an XML error`, {
+    toast(info.valid ? `Imported ${file.name} with ${info.categories} rules` : `Imported ${file.name}, but it has an XML error`, {
       error: !info.valid,
     });
   };
@@ -2360,6 +2789,7 @@ async function boot() {
 
     ttsReady = true;
     syncVoiceControls();
+    fillSoundBars();
     badge.textContent = "Voice ready";
     badge.classList.remove("is-loading");
     setStudioStatus("Voice ready. 24 kHz speech, synthesized in your browser.");

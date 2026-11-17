@@ -871,6 +871,7 @@ button, select, input, textarea {
   border-bottom-right-radius: 4px;
 }
 
+
 .chat-bubble .match-meta {
   display: block;
   margin-top: 4px;
@@ -951,7 +952,7 @@ button, select, input, textarea {
   border-left: 1px solid var(--line);
 }
 
-.feature-card:first-child {
+.feature-card:first-of-type {
   padding-left: 0;
 }
 
@@ -1138,7 +1139,7 @@ button, select, input, textarea {
 .designer-canvas-wrap {
   position: relative;
   /* Sized from the viewport so the whole stage panel stays visible while it is sticky. */
-  height: clamp(250px, calc(100vh - 476px), 440px);
+  height: clamp(240px, calc(100vh - 544px), 440px);
   background:
     linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
@@ -1292,6 +1293,61 @@ button, select, input, textarea {
 .mini-tag:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Avatar action chips: tinted with the sculpt cyan so they read as "movement", not "voice" */
+.mini-tag.action {
+  border-color: color-mix(in srgb, var(--cyan) 45%, var(--line));
+  background: color-mix(in srgb, var(--cyan) 9%, var(--bg-elev));
+}
+
+.mini-tag.action:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+/* Sound chips: tinted with the voice rose, because these are heard */
+.mini-tag.sound {
+  border-color: color-mix(in srgb, var(--voice) 38%, var(--line));
+  background: color-mix(in srgb, var(--voice) 7%, var(--bg-elev));
+}
+
+.mini-tag.sound:hover {
+  border-color: var(--voice);
+  color: var(--voice);
+}
+
+/* a little air between the groups: laughter, breath, reactions, voice, mouth, body */
+.mini-tag.sound.group-start {
+  margin-left: 8px;
+}
+
+.tag-insert-bar[hidden] {
+  display: none;
+}
+
+/* in the rule builder the palette wraps, but stays a few rows high */
+.sound-palette {
+  max-height: 92px;
+  overflow-y: auto;
+}
+
+/* One scrolling row per chip group keeps the stage panel a fixed height. */
+.audition-box .tag-insert-bar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent);
+  padding-right: 18px;
+}
+
+.audition-box .tag-insert-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.audition-box .tag-insert-bar > * {
+  flex: none;
 }
 
 #auditionText {
@@ -1450,6 +1506,13 @@ button, select, input, textarea {
 .sub-label {
   font-weight: 600;
   margin-bottom: 7px;
+}
+
+.block-note {
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
 
 .gap-top {
@@ -1621,6 +1684,18 @@ input[type="range"] {
 #auditionText:hover,
 .code-editor:hover {
   border-color: var(--muted);
+}
+
+.inline-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* select + color pairs for eyewear, headwear and earrings */
+.field-row.accessory-grid {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: end;
 }
 
 .inline-pair {
@@ -1825,6 +1900,173 @@ input[type="color"]::-moz-color-swatch {
   margin-top: 7px;
   font-size: 12.4px;
   color: var(--voice);
+}
+
+/* Business facts: short facts side by side, longer ones across the full width */
+.facts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.facts-grid .span-all {
+  grid-column: 1 / -1;
+}
+
+/* Rule list above the AIML editor */
+.rule-browser {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg-inset);
+}
+
+.rule-browser > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12.8px;
+  font-weight: 650;
+  color: var(--ink-soft);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.rule-browser > summary::-webkit-details-marker {
+  display: none;
+}
+
+.rule-browser > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.rule-browser[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.rule-browser > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 9px;
+}
+
+.count-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--muted);
+  font-size: 11.4px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.rule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 232px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
+.rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 12px;
+}
+
+.rule-row + .rule-row {
+  border-top: 1px solid var(--line);
+}
+
+.rule-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rule-pattern {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 11.8px;
+  color: var(--accent);
+}
+
+.rule-preview {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.4px;
+  color: var(--ink-soft);
+}
+
+.rule-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* What the rule checker noticed */
+.lint-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--amber) 11%, transparent);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.lint-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.lint-line {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lint-line:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (max-width: 640px) {
+  .facts-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rule-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
 }
 
 .studio-chat-box {
@@ -2330,12 +2572,12 @@ input[type="color"]::-moz-color-swatch {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .feature-card:nth-child(odd) {
+  .feature-card:nth-of-type(odd) {
     padding-left: 0;
     border-left: none;
   }
 
-  .feature-card:nth-child(n + 3) {
+  .feature-card:nth-of-type(n + 3) {
     border-top: 1px solid var(--line);
   }
 
@@ -2572,7 +2814,7 @@ input[type="color"]::-moz-color-swatch {
   }
 
   .feature-card,
-  .feature-card:first-child {
+  .feature-card:first-of-type {
     display: grid;
     grid-template-columns: 26px minmax(0, 1fr);
     column-gap: 12px;
@@ -2764,6 +3006,10 @@ input[type="color"]::-moz-color-swatch {
   .field-row.two-col,
   .field-row.hair-colors {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field-row.accessory-grid {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   #tabChat .field-row.three-col {

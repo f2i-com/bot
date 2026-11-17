@@ -9,8 +9,20 @@ import {
   stepAvatarPhysics,
   drawBotAvatar,
   triggerAvatarEmote,
+  setAvatarMood,
+  buildCueTimeline,
+  estimateCueTimeline,
+  runDueCues,
 } from "./avatar-renderer.js";
-import { AIMLEngine, stripSpeechTags, STARTER_AIML_PACKS } from "./aiml-engine.js";
+import {
+  AIMLEngine,
+  stripSpeechTags,
+  parseSpeechCues,
+  captionForSpokenWord,
+  STARTER_AIML_PACKS,
+  BASE_AIML_XML,
+  BOT_FACTS,
+} from "./aiml-engine.js";
 
 async function gunzipBytes(compressedBytes) {
   if (typeof DecompressionStream === "function") {
@@ -444,6 +456,16 @@ button:focus-visible,
   color: #ffffff;
   border-bottom-right-radius: 4px;
 }
+.bc-msg a {
+  color: #1a5fe6;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bc-msg a:focus-visible {
+  outline: 2px solid #1a5fe6;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
 .bc-chips {
   display: flex;
   flex-wrap: wrap;
@@ -636,6 +658,40 @@ const SIZE_MAP = {
   large: { w: 216, h: 262, orb: 196 },
 };
 
+const LINK_PATTERN =
+  /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+\.[a-z]{2,}[^\s<>"']*|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\+?\d[\d ().-]{6,}\d)/gi;
+
+/**
+ * Appends `text` to `el`, turning web addresses, email addresses and phone numbers into links.
+ * Everything is added as text nodes and elements, never as HTML.
+ */
+export function appendTextWithLinks(el, text) {
+  let last = 0;
+  for (const match of text.matchAll(LINK_PATTERN)) {
+    const token = match[0].replace(/[.,!?;:)]+$/, ""); // sentence punctuation is not part of the link
+    let href = "";
+    if (/^https?:\/\//i.test(token)) href = token;
+    else if (/^www\./i.test(token)) href = `https://${token}`;
+    else if (token.includes("@")) href = `mailto:${token}`;
+    else {
+      const digits = token.replace(/\D/g, "");
+      if (token.startsWith("+") || digits.length >= 9) href = `tel:${token.replace(/[^\d+]/g, "")}`;
+    }
+    if (!href) continue;
+    el.append(text.slice(last, match.index));
+    const a = document.createElement("a");
+    a.href = href;
+    a.textContent = token;
+    if (href.startsWith("http")) {
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+    }
+    el.append(a);
+    last = match.index + token.length;
+  }
+  el.append(text.slice(last));
+}
+
 export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   const config = {
     name: "Aria",
@@ -650,6 +706,9 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     showCaptions: true,
     chatEnabled: true,
     chatStartOpen: false,
+    baseBrain: true, // everyday small talk underneath your own AIML rules
+    facts: {}, // { about, hours, email, phone, address, pricing }: answered without writing any rules
+    rememberChat: true, // keep the conversation when the visitor moves to another page (this tab only)
     wasmUrl: "./tts.wasm",
     aimlUrl: "",
     aimlXml: STARTER_AIML_PACKS.concierge.xml,
@@ -782,15 +841,18 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     rootEl.classList.add("chat-is-open");
   }
 
-  // Initialize AIML Engine
+  // Initialize AIML Engine (your rules on top, the base small-talk layer underneath)
+  const botPropsFromConfig = () => {
+    const facts = config.facts && typeof config.facts === "object" ? config.facts : {};
+    const props = { name: config.name, role: config.role, company: config.company, website: config.website };
+    for (const { key } of BOT_FACTS) props[key] = String(facts[key] ?? "").trim();
+    return props;
+  };
   const aiml = new AIMLEngine({
-    botProps: {
-      name: config.name,
-      role: config.role,
-      company: config.company,
-      website: config.website,
-    },
+    botProps: botPropsFromConfig(),
+    baseXml: config.baseBrain === false ? "" : BASE_AIML_XML,
   });
+  const defaultChips = () => aiml.quickChips.map((c) => ({ label: c, query: c }));
 
   async function initAimlBrain() {
     let xmlText = config.aimlXml || "";
@@ -809,15 +871,57 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
         console.warn("[bot.computer] Invalid AIML XML:", err);
       }
     }
-    renderChips(aiml.quickChips.map((c) => ({ label: c, query: c })));
+    renderChips(defaultChips());
   }
 
+  const transcript = [];
   function appendChatMessage(role, text) {
     const div = document.createElement("div");
     div.className = `bc-msg ${role}`;
-    div.textContent = text;
+    if (role === "bot") appendTextWithLinks(div, String(text));
+    else div.textContent = text;
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+    transcript.push({ role, text: String(text) });
+    return div;
+  }
+
+  // The conversation carries over from page to page within a browser tab (never in the studio preview).
+  const rememberChat = config.rememberChat !== false && config.position !== "contained";
+  const sessionKey = `bot-computer:chat:${String(config.sessionId || config.name || "bot").toLowerCase()}`;
+  function saveSession() {
+    if (!rememberChat) return;
+    try {
+      sessionStorage.setItem(
+        sessionKey,
+        JSON.stringify({
+          v: 1,
+          transcript: transcript.slice(-40),
+          engine: aiml.exportSession(),
+          open: chatPanel.classList.contains("open"),
+        })
+      );
+    } catch {
+      // Storage can be unavailable (private mode, blocked cookies); the chat simply starts fresh.
+    }
+  }
+  function restoreSession() {
+    if (!rememberChat) return false;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(sessionKey) || "null");
+      if (!saved || saved.v !== 1 || !Array.isArray(saved.transcript) || !saved.transcript.length) return false;
+      for (const m of saved.transcript) {
+        if (m && (m.role === "bot" || m.role === "user") && typeof m.text === "string") appendChatMessage(m.role, m.text);
+      }
+      aiml.importSession(saved.engine);
+      if (saved.open && config.chatEnabled) {
+        chatPanel.classList.add("open");
+        rootEl.classList.add("chat-is-open");
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function renderChips(chips) {
@@ -847,6 +951,9 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   let destroyed = false;
   let rafId = 0;
   let captionTimer = 0;
+  // Inline cues ([wave], [wink], mood tags) for the line being spoken, and a clock for silent playback
+  let cueTimeline = null;
+  let silentCueStartMs = 0;
 
   // Pointer tracking across host window for SitePal eye-tracking!
   const onPointerMove = (e) => {
@@ -872,6 +979,9 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     isPlaying = false;
     activeSpeech = null;
     captionKey = "";
+    cueTimeline = null;
+    silentCueStartMs = 0;
+    setAvatarMood(anim, "");
     setSpeakBtn(false);
     if (ttsVoice) headStatusEl.textContent = STATUS_READY;
   }
@@ -891,7 +1001,8 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       captionFor = speech;
       captionKey = "";
       const tokens = String(speech.text || "").split(/\s+/).filter(Boolean);
-      captionLabels = tokens.length === speech.words.length ? tokens : speech.words.map((w) => w.word);
+      // A sound the voice makes is reported as "[laugh]"; the caption says "(laughs)".
+      captionLabels = (tokens.length === speech.words.length ? tokens : speech.words.map((w) => w.word)).map(captionForSpokenWord);
     }
     let started = 0;
     let active = -1;
@@ -933,17 +1044,40 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       return null;
     });
 
-  async function speakText(rawText, { emote = "" } = {}) {
-    const cleanCheck = stripSpeechTags(rawText);
-    if (!cleanCheck) return;
-    if (emote) triggerAvatarEmote(anim, emote, 2400);
+  /**
+   * Speaks a line. Avatar actions written inline (`[wave]`, `[wink]`, ...) are removed from the
+   * speech and fire as the voice reaches them; voice styles such as `[happy]` or `[sad]` also set
+   * the face. `emote` plays one gesture straight away, and `defaultEmote` only if the line has no
+   * actions of its own.
+   */
+  async function speakText(rawText, { emote = "", defaultEmote = "", cues = null, cueWords = 0 } = {}) {
+    const parsed = cues ? { speechText: String(rawText), cues, wordCount: cueWords } : parseSpeechCues(rawText);
+    const hasActions = parsed.cues.some((c) => c.type === "action");
+    const startEmote = emote || (hasActions ? "" : defaultEmote);
+    if (startEmote) triggerAvatarEmote(anim, startEmote);
 
-    const voice = ttsVoice || (await enginePromise);
-    if (!voice || isMuted) return;
+    // Without audio (text-only, muted, or blocked by autoplay rules) the gestures still play,
+    // paced at reading speed.
+    const playCuesSilently = () => {
+      cueTimeline = estimateCueTimeline(parsed.cues);
+      silentCueStartMs = performance.now();
+    };
+
+    // Words, or a sound the voice makes such as "[laugh]": either is something to hear.
+    const hasWords = Boolean(stripSpeechTags(parsed.speechText)) || parsed.cues.some((c) => c.sound);
+    const voice = hasWords ? ttsVoice || (await enginePromise) : null;
+    if (!voice || isMuted) {
+      stopSpeech();
+      playCuesSilently();
+      return;
+    }
 
     stopSpeech();
     const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
-    if (!Ctx) return;
+    if (!Ctx) {
+      playCuesSilently();
+      return;
+    }
     audioCtx ??= new Ctx();
     if (audioCtx.state === "suspended") {
       try {
@@ -953,13 +1087,17 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     if (audioCtx.state === "suspended") {
       // Browser autoplay policy requires first user gesture
       promptBadge.hidden = false;
+      playCuesSilently();
       return;
     }
     promptBadge.hidden = true;
 
-    const hasInlineTags = /\[[a-zA-Z_/]/.test(String(rawText));
-    const speech = hasInlineTags ? voice.speakScript(String(rawText)) : voice.speak(String(rawText));
-    if (!speech || !speech.samples || !speech.samples.length) return;
+    const hasInlineTags = /\[[a-zA-Z_/]/.test(parsed.speechText);
+    const speech = hasInlineTags ? voice.speakScript(parsed.speechText) : voice.speak(parsed.speechText);
+    if (!speech || !speech.samples || !speech.samples.length) {
+      playCuesSilently();
+      return;
+    }
 
     const buffer = audioCtx.createBuffer(1, speech.samples.length, speech.sampleRate);
     buffer.copyToChannel(speech.samples, 0);
@@ -968,6 +1106,8 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     sourceNode.connect(audioCtx.destination);
 
     activeSpeech = speech;
+    cueTimeline = buildCueTimeline(speech, parsed.cues, parsed.wordCount);
+    silentCueStartMs = 0;
     playStartedAt = audioCtx.currentTime + 0.015;
     isPlaying = true;
     setSpeakBtn(true);
@@ -975,6 +1115,10 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
     sourceNode.start(playStartedAt);
     sourceNode.onended = () => {
+      // Fire anything still pending (a gesture written at the very end of the line), then relax the face.
+      runDueCues(anim, cueTimeline, Infinity);
+      cueTimeline = null;
+      setAvatarMood(anim, "");
       isPlaying = false;
       activeSpeech = null;
       captionKey = "";
@@ -993,18 +1137,31 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       captionEl.classList.remove("visible");
     }
     appendChatMessage("user", displayLabel || q);
+    // Matching takes about a millisecond, so the answer is shown at once and the voice starts with it.
     const res = aiml.reply(q);
     appendChatMessage("bot", res.displayText);
-    if (res.chips && res.chips.length) {
-      renderChips(res.chips);
+    renderChips(res.chips && res.chips.length ? res.chips : defaultChips());
+    saveSession();
+
+    // Wake the audio output while still inside the click or key press, let the answer paint,
+    // then render the voice.
+    const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (Ctx && !isMuted) {
+      audioCtx ??= new Ctx();
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
     }
-    await speakText(res.speechText, { emote: res.emote || "" });
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+      setTimeout(resolve, 80); // animation frames do not fire in a background tab
+    });
+    if (destroyed) return;
+    await speakText(res.speechText, { cues: res.cues, cueWords: res.cueWords });
   }
 
   // Wire UI events
   const toggleGreeting = () => {
     if (isPlaying) stopSpeech();
-    else speakText(config.greeting, { emote: "wave" });
+    else speakText(config.greeting, { defaultEmote: "wave" });
   };
   stageCard.onclick = toggleGreeting;
   stageCard.onkeydown = (e) => {
@@ -1018,6 +1175,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   const closeChat = () => {
     chatPanel.classList.remove("open");
     rootEl.classList.remove("chat-is-open");
+    saveSession();
   };
 
   askBtn.onclick = () => {
@@ -1030,6 +1188,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       }
       setTimeout(() => inputEl.focus({ preventScroll: true }), 60);
     }
+    saveSession();
   };
 
   closeChatBtn.onclick = closeChat;
@@ -1063,8 +1222,24 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     const text = inputEl.value.trim();
     if (!text) return;
     inputEl.value = "";
+    typingUntilMs = 0;
     handleUserQuestion(text);
   };
+
+  // While the visitor types, the avatar looks toward the message box.
+  let typingUntilMs = 0;
+  const typingPointer = { nx: 0, ny: 0, active: true };
+  inputEl.addEventListener("input", () => {
+    const a = stageCard.getBoundingClientRect();
+    const b = inputEl.getBoundingClientRect();
+    if (!a.width || !b.width) return;
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+    const dy = b.top + b.height / 2 - (a.top + a.height * 0.42);
+    const len = Math.hypot(dx, dy) || 1;
+    typingPointer.nx = (dx / len) * 0.8;
+    typingPointer.ny = (dy / len) * 0.8;
+    typingUntilMs = performance.now() + 1500;
+  });
 
   // Detect narrow host container (e.g. 375px mobile preview frame on desktop)
   let resizeObs = null;
@@ -1094,12 +1269,19 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
         const tSec = Math.max(0, audioCtx.currentTime - playStartedAt);
         sampled = sampleSpeechAt(activeSpeech, Math.min(tSec, activeSpeech.duration), config.voice?.pitchHz || 160);
         showCaptionWords(activeSpeech, tSec);
+        runDueCues(anim, cueTimeline, tSec, nowMs);
+      } else if (cueTimeline && silentCueStartMs) {
+        runDueCues(anim, cueTimeline, (performance.now() - silentCueStartMs) / 1000, nowMs);
+        if (cueTimeline.next >= cueTimeline.items.length) {
+          cueTimeline = null;
+          silentCueStartMs = 0;
+        }
       }
       stepAvatarPhysics(
         anim,
         nowMs,
         sampled,
-        config.eyeTracking ? pointer : null,
+        performance.now() < typingUntilMs ? typingPointer : config.eyeTracking ? pointer : null,
         config.voice?.pitchHz || 160
       );
       const ctx = canvas.getContext("2d");
@@ -1109,6 +1291,11 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   }
 
   await initAimlBrain();
+  restoreSession();
+  // Get the matcher up to speed while the page is idle, before the first question arrives.
+  (globalThis.requestIdleCallback || ((fn) => setTimeout(fn, 250)))(() => {
+    if (!destroyed) aiml.warmUp();
+  });
   if (config.chatEnabled && config.chatStartOpen && !messagesEl.children.length) {
     appendChatMessage("bot", stripSpeechTags(config.greeting));
   }
@@ -1116,7 +1303,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
   if (config.autoGreet) {
     enginePromise.then(() => {
-      speakText(config.greeting, { emote: "wave" });
+      speakText(config.greeting, { defaultEmote: "wave" });
     });
   }
 
@@ -1125,11 +1312,39 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     say: (text, emote = "") => speakText(text, { emote }),
     ask: (question) => handleUserQuestion(question),
     stop: stopSpeech,
-    emote: (name) => triggerAvatarEmote(anim, name, 2400),
+    emote: (name, durationMs) => triggerAvatarEmote(anim, name, durationMs),
+    /**
+     * A sound that is not a word, in the bot's own voice and with the face to match: "laugh",
+     * "sigh", "gasp", "yawn", "whistle" ... Options: `intensity` (0..1 or "gentle" / "strong"),
+     * `length` (a factor, 1 is usual) or `durationMs`.
+     */
+    sound(name, options = {}) {
+      const id = String(name || "").trim().toLowerCase().replace(/[^a-z-]/g, "");
+      if (!id) return Promise.resolve();
+      let tag = id;
+      if (options.intensity !== undefined) tag += ` intensity=${String(options.intensity).replace(/[^\w.]/g, "")}`;
+      if (options.length !== undefined) tag += ` length=${String(options.length).replace(/[^\w.]/g, "")}`;
+      if (options.durationMs > 0) tag += ` for=${(Number(options.durationMs) / 1000).toFixed(2)}s`;
+      return speakText(`[${tag}]`);
+    },
+    mood: (name) => setAvatarMood(anim, name),
+    /** Forgets the conversation so far, on screen and in the bot's memory. */
+    clearChat() {
+      messagesEl.replaceChildren();
+      transcript.length = 0;
+      aiml.resetSession();
+      renderChips(defaultChips());
+      try {
+        sessionStorage.removeItem(sessionKey);
+      } catch {}
+    },
     updateConfig(patch = {}) {
+      const propsBefore = JSON.stringify(botPropsFromConfig());
       if (patch.name !== undefined) config.name = patch.name;
       if (patch.role !== undefined) config.role = patch.role;
       if (patch.company !== undefined) config.company = patch.company;
+      if (patch.facts !== undefined) config.facts = { ...(patch.facts || {}) };
+      const propsChanged = JSON.stringify(botPropsFromConfig()) !== propsBefore;
       if (patch.greeting !== undefined) config.greeting = patch.greeting;
       if (patch.eyeTracking !== undefined) config.eyeTracking = patch.eyeTracking;
       if (patch.showCaptions !== undefined) config.showCaptions = patch.showCaptions;
@@ -1155,12 +1370,23 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
           } catch {}
         }
       }
-      if (patch.aimlXml !== undefined) {
+      if (patch.baseBrain !== undefined && Boolean(patch.baseBrain) !== (config.baseBrain !== false)) {
+        config.baseBrain = Boolean(patch.baseBrain);
+        try {
+          aiml.loadBaseXML(config.baseBrain ? BASE_AIML_XML : "");
+        } catch {}
+      }
+      // Facts and names are used inside rules, so the engine re-reads them when they change.
+      if (propsChanged) {
+        try {
+          aiml.setBotProps(botPropsFromConfig());
+        } catch {}
+      }
+      if (patch.aimlXml !== undefined && patch.aimlXml !== config.aimlXml) {
         config.aimlXml = patch.aimlXml;
         try {
-          aiml.setBotProps({ name: config.name, role: config.role, company: config.company });
           aiml.loadXML(config.aimlXml);
-          renderChips(aiml.quickChips.map((c) => ({ label: c, query: c })));
+          renderChips(defaultChips());
         } catch {}
       }
       applyIdentityText();

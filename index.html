@@ -275,7 +275,7 @@
       <article class="feature-card">
         <div class="feat-icon"><svg class="ic"><use href="#i-chat"/></svg></div>
         <h3>A chat brain written in AIML</h3>
-        <p>Turn the avatar into a Q&amp;A guide with standard AIML XML: wildcards, <code>&lt;srai&gt;</code>, <code>&lt;random&gt;</code>, memory variables and quick-reply chips.</p>
+        <p>Turn the avatar into a Q&amp;A guide with standard AIML XML. A base brain covers everyday small talk, and inline actions such as <code>[wave]</code> and <code>[wink]</code> make it gesture as it speaks.</p>
       </article>
       <article class="feature-card">
         <div class="feat-icon"><svg class="ic"><use href="#i-code"/></svg></div>
@@ -361,27 +361,31 @@
 
             <!-- Speech test -->
             <div class="audition-box">
-              <div class="tag-insert-bar" role="group" aria-label="Insert a speech tag">
-                <span class="tiny-label">Insert tag</span>
+              <div class="tag-insert-bar" role="group" aria-label="Insert a voice tag">
+                <span class="tiny-label">Voice</span>
                 <button type="button" class="mini-tag" data-ins="[cheerful] ">Cheerful</button>
                 <button type="button" class="mini-tag" data-ins="[excited, speed=1.15] ">Excited</button>
                 <button type="button" class="mini-tag" data-ins="[calm, warmth=0.8] ">Calm</button>
+                <button type="button" class="mini-tag" data-ins="[sad] ">Sad</button>
                 <button type="button" class="mini-tag" data-ins="[whisper] ">Whisper</button>
+                <button type="button" class="mini-tag" data-ins="[laughing] " title="Says what follows while laughing. End it with [/laughing]">Laughing</button>
                 <button type="button" class="mini-tag" data-ins="[pause=280ms] ">Pause</button>
                 <button type="button" class="mini-tag" data-ins="[sing bpm=110] C4:1=Hel- E4:1=lo G4:2=there! [/sing] ">Sing</button>
               </div>
+              <!-- Avatar actions: each chip previews the gesture and inserts its tag where the cursor is -->
+              <div class="tag-insert-bar" id="actionTagBar" role="group" aria-label="Insert an avatar action">
+                <span class="tiny-label">Actions</span>
+              </div>
+              <!-- Sounds the voice can make: each chip plays the sound and inserts its tag -->
+              <div class="tag-insert-bar" id="soundTagBar" role="group" aria-label="Insert a sound the voice makes" hidden>
+                <span class="tiny-label">Sounds</span>
+              </div>
 
-              <textarea id="auditionText" rows="2" spellcheck="false" aria-label="Line for the bot to speak">[cheerful] Hi! Welcome to our website! Move your mouse around and watch my eyes follow you, or sculpt my body right on the canvas!</textarea>
+              <textarea id="auditionText" rows="2" spellcheck="false" aria-label="Line for the bot to speak">[cheerful] Hi! [wave] Welcome to our website! Move your mouse around and watch my eyes follow you, or sculpt my body right on the canvas! [wink]</textarea>
 
               <div class="audition-actions">
                 <button type="button" id="studioSpeakBtn" class="btn primary"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Speak</span></button>
                 <button type="button" id="studioStopBtn" class="btn" disabled><svg class="ic"><use href="#i-stop"/></svg>Stop</button>
-                <div class="seg emote-seg" role="group" aria-label="Play a gesture">
-                  <button type="button" class="emote-btn" data-emote="wave">Wave</button>
-                  <button type="button" class="emote-btn" data-emote="happy">Smile</button>
-                  <button type="button" class="emote-btn" data-emote="wink">Wink</button>
-                  <button type="button" class="emote-btn" data-emote="think">Think</button>
-                </div>
                 <button type="button" id="downloadWavBtn" class="btn xs" title="Download this line as a 24 kHz WAV file"><svg class="ic"><use href="#i-download"/></svg>WAV</button>
               </div>
               <div class="synth-perf-line" id="studioStatusLine" role="status">Loading voice…</div>
@@ -452,6 +456,9 @@
                       <option value="sky_glass">Sky daylight</option>
                       <option value="emerald_mist">Emerald teal</option>
                       <option value="sunset">Warm dusk</option>
+                      <option value="violet_haze">Violet haze</option>
+                      <option value="mint_fresh">Fresh mint</option>
+                      <option value="graphite">Graphite</option>
                       <option value="custom">Custom colors</option>
                       <option value="transparent">Transparent</option>
                     </select>
@@ -479,10 +486,13 @@
               <div class="control-block">
                 <div class="block-head">
                   <h3>Contour and skin</h3>
-                  <div class="seg" id="genderStyleSeg" role="group" aria-label="Facial contour style">
-                    <button type="button" data-gstyle="feminine" class="active">Soft</button>
-                    <button type="button" data-gstyle="neutral">Neutral</button>
-                    <button type="button" data-gstyle="masculine">Angular</button>
+                  <div class="head-actions">
+                    <div class="seg" id="genderStyleSeg" role="group" aria-label="Facial contour style">
+                      <button type="button" data-gstyle="feminine" class="active">Soft</button>
+                      <button type="button" data-gstyle="neutral">Neutral</button>
+                      <button type="button" data-gstyle="masculine">Angular</button>
+                    </div>
+                    <button type="button" id="randomizeFaceBtn" class="btn xs" title="Randomize only the face"><svg class="ic"><use href="#i-dice"/></svg>Random face</button>
                   </div>
                 </div>
 
@@ -495,6 +505,17 @@
                 </div>
 
                 <div class="sliders-grid gap-top" id="skinMaterialSlidersHost"></div>
+                <div class="checks-strip gap-top">
+                  <label class="check-field"><input type="checkbox" id="beautyMarkCheck"> <span>Beauty mark</span></label>
+                </div>
+              </div>
+
+              <div class="control-block">
+                <div class="block-head">
+                  <h3>Resting expression</h3>
+                  <span class="hint-text">The face your bot wears between gestures</span>
+                </div>
+                <div class="sliders-grid" id="expressionSlidersHost"></div>
               </div>
 
               <div class="control-block">
@@ -538,6 +559,19 @@
                     </div>
                   </div>
                 </div>
+                <div class="field-row two-col gap-bottom">
+                  <label class="field">
+                    <span>Eyeshadow color <em class="field-hint">Strength is set with the Eyeshadow slider above</em></span>
+                    <input type="color" id="eyeshadowColorPicker" value="#7a5c8f">
+                  </label>
+                  <div class="field">
+                    <span id="browColorLabel">Brow and beard color</span>
+                    <div class="inline-color">
+                      <input type="color" id="browColorPicker" value="#3c2734" aria-labelledby="browColorLabel">
+                      <button type="button" id="browMatchHairBtn" class="btn xs" title="Use the hair color for the brows and beard">Match hair</button>
+                    </div>
+                  </div>
+                </div>
                 <div class="sliders-grid" id="featuresSlidersHost"></div>
               </div>
             </div>
@@ -545,7 +579,10 @@
             <!-- TAB 3: HAIR AND OUTFIT -->
             <div class="tab-content" id="tabStyle" role="tabpanel" aria-labelledby="tabBtnStyle" hidden>
               <div class="control-block">
-                <h3>Hairstyle and color</h3>
+                <div class="block-head">
+                  <h3>Hairstyle and color</h3>
+                  <button type="button" id="randomizeStyleBtn" class="btn xs" title="Randomize only the hair, outfit and accessories"><svg class="ic"><use href="#i-dice"/></svg>Random style</button>
+                </div>
                 <div class="pill-grid" id="hairStylePills" role="group" aria-label="Hairstyle"></div>
                 <div class="field-row hair-colors gap-top">
                   <div class="field">
@@ -563,6 +600,9 @@
                     <span>Facial hair</span>
                     <select id="facialHairSelect"></select>
                   </label>
+                </div>
+                <div class="checks-strip gap-top">
+                  <label class="check-field"><input type="checkbox" id="fringeCheck"> <span>Fringe across the forehead</span></label>
                 </div>
               </div>
 
@@ -586,15 +626,39 @@
               </div>
 
               <div class="control-block">
-                <h3>Glasses and gear</h3>
-                <div class="field-row two-col">
+                <h3>Glasses, hats, neckwear and jewellery</h3>
+                <div class="field-row accessory-grid">
                   <label class="field">
                     <span>Eyewear</span>
                     <select id="glassesSelect"></select>
                   </label>
                   <label class="field">
-                    <span>Frame color</span>
+                    <span>Frame</span>
                     <input type="color" id="glassesColorPicker" value="#1f2430">
+                  </label>
+                  <label class="field">
+                    <span>Headwear</span>
+                    <select id="headwearSelect"></select>
+                  </label>
+                  <label class="field">
+                    <span>Color</span>
+                    <input type="color" id="headwearColorPicker" value="#b4452f">
+                  </label>
+                  <label class="field">
+                    <span>Earrings</span>
+                    <select id="earringsSelect"></select>
+                  </label>
+                  <label class="field">
+                    <span>Metal</span>
+                    <input type="color" id="earringColorPicker" value="#e6c35c">
+                  </label>
+                  <label class="field">
+                    <span>Neckwear</span>
+                    <select id="neckwearSelect"></select>
+                  </label>
+                  <label class="field">
+                    <span>Color</span>
+                    <input type="color" id="neckwearColorPicker" value="#d9a441">
                   </label>
                 </div>
                 <div class="checks-strip gap-top">
@@ -668,9 +732,30 @@
                 </div>
 
                 <label class="field gap-top">
-                  <span>Spoken greeting <em class="field-hint">Speech tags such as <code>[cheerful]</code>, <code>[calm]</code> and <code>[sing]</code> work here</em></span>
+                  <span>Spoken greeting <em class="field-hint">Voice tags such as <code>[cheerful]</code> and avatar actions such as <code>[wave]</code> or <code>[wink]</code> work here</em></span>
                   <input type="text" id="botGreetingInput" value="[cheerful] Hi! Welcome to our website! I'm Aria, your virtual companion. Click below to ask me any question!">
                 </label>
+              </div>
+
+              <div class="control-block">
+                <div class="block-head">
+                  <h3>Everyday small talk</h3>
+                  <label class="switch-pill">
+                    <input type="checkbox" id="baseBrainCheck" checked>
+                    <span>Include the base brain</span>
+                  </label>
+                </div>
+                <p class="block-note" id="baseBrainInfo">About 360 rules for everyday conversation: greetings, how you feel, questions about the bot, jokes, riddles, trivia, quick games, sums, dates and a little general knowledge. It remembers what a visitor says about themselves while the tab is open. Your own rules always win. Typos, chat shorthand and other ways of saying the same thing (“fees” for “pricing”) are understood.</p>
+              </div>
+
+              <div class="control-block">
+                <div class="block-head">
+                  <h3>Business facts</h3>
+                  <span class="hint-text">Optional, no rules to write</span>
+                </div>
+                <p class="block-note">Fill in what applies and the bot answers questions such as “when are you open?” or “how can I contact you?” by itself. A rule of your own on the same subject still wins.</p>
+                <div class="facts-grid gap-top" id="factsHost"></div>
+                <p class="editor-note" id="factsNeedBaseNote" hidden>Switch on the base brain above for these to be answered.</p>
               </div>
 
               <div class="control-block">
@@ -690,15 +775,10 @@
                     <input type="text" id="qaPatternInput" placeholder="# business hours # | when are you open">
                   </label>
                   <div class="field">
-                    <span id="qaExtrasLabel">Gesture and follow-up chips</span>
+                    <span id="qaExtrasLabel">Opening gesture and follow-up chips</span>
                     <div class="inline-pair">
-                      <select id="qaEmoteSelect" aria-label="Gesture">
+                      <select id="qaEmoteSelect" aria-label="Opening gesture">
                         <option value="">No gesture</option>
-                        <option value="wave">Wave</option>
-                        <option value="happy">Smile</option>
-                        <option value="nod">Nod</option>
-                        <option value="wink">Wink</option>
-                        <option value="think">Think</option>
                       </select>
                       <input type="text" id="qaChipsInput" placeholder="Pricing, Contact us" aria-label="Follow-up chips, comma separated">
                     </div>
@@ -710,6 +790,14 @@
                     <input type="text" id="qaAnswerInput" placeholder="[cheerful] We are open Monday through Friday from 9 AM to 6 PM!">
                   </label>
                   <button type="button" id="addQaRuleBtn" class="btn primary"><svg class="ic"><use href="#i-plus"/></svg>Add rule</button>
+                </div>
+                <!-- Actions can go anywhere in an answer; they play when the voice reaches them -->
+                <div class="tag-insert-bar gap-top" id="qaActionBar" role="group" aria-label="Insert an avatar action into the answer">
+                  <span class="tiny-label">Add an action</span>
+                </div>
+                <!-- Sounds are heard in the voice and shown on the face: a laugh, a sigh, a gasp -->
+                <div class="tag-insert-bar gap-top sound-palette" id="qaSoundBar" role="group" aria-label="Insert a sound into the answer" hidden>
+                  <span class="tiny-label">Add a sound</span>
                 </div>
               </div>
 
@@ -726,8 +814,13 @@
                     <button type="button" id="exportAimlFileBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>Export</button>
                   </div>
                 </div>
+                <details class="rule-browser" id="aimlRuleBrowser" open>
+                  <summary>Rules in this document <span class="count-badge" id="aimlRuleCount">0</span></summary>
+                  <ul class="rule-list" id="aimlRuleList"></ul>
+                </details>
                 <textarea id="aimlXmlEditor" class="code-editor" rows="11" spellcheck="false" aria-label="AIML XML document"></textarea>
                 <p class="editor-note" id="aimlErrorNote" hidden></p>
+                <ul class="lint-list" id="aimlWarnings" aria-label="Things to check in your rules" hidden></ul>
               </div>
 
               <!-- Live chat tester -->
@@ -831,7 +924,7 @@
 
           <div class="download-hero-box">
             <h4>Download as one file <code id="selfContainedFilenameLabel">aria-bot.js</code></h4>
-            <p>Your avatar, voice settings, AIML brain and a compressed <code>tts.wasm</code>, packed into a single script. Works offline, about 920&nbsp;KB.</p>
+            <p>Your avatar, voice settings, AIML brain and a compressed <code>tts.wasm</code>, packed into a single script. Works offline, about 1&nbsp;MB.</p>
             <div class="dl-buttons">
               <button type="button" id="downloadSelfContainedJsBtn" class="btn primary full-w"><svg class="ic"><use href="#i-download"/></svg>Download self-contained .js</button>
               <button type="button" id="downloadDemoHtmlBtn" class="btn full-w"><svg class="ic"><use href="#i-download"/></svg>Download a standalone demo page</button>
@@ -883,15 +976,31 @@
         </details>
         <details class="faq-item">
           <summary><h3>How do I add the avatar to my website?</h3></summary>
-          <p>Download the self-contained <code>.js</code> file from <a href="#embedSection">Preview and export</a>, put it next to your page and add one script tag. The companion appears in the corner of the page inside a Shadow DOM, so your site’s styles and its own can’t interfere with each other. The file is about 920&nbsp;KB and works offline.</p>
+          <p>Download the self-contained <code>.js</code> file from <a href="#embedSection">Preview and export</a>, put it next to your page and add one script tag. The companion appears in the corner of the page inside a Shadow DOM, so your site’s styles and its own can’t interfere with each other. The file is about 1&nbsp;MB and works offline.</p>
         </details>
         <details class="faq-item">
           <summary><h3>How does the lip sync work?</h3></summary>
           <p>The speech comes from a physical model of the human vocal tract rather than from recordings. Every 5 milliseconds the model reports where the jaw, tongue and lips are, and the avatar’s mouth is drawn from those positions, so the lip shapes always match the sound.</p>
         </details>
         <details class="faq-item">
+          <summary><h3>Can the avatar gesture while it talks?</h3></summary>
+          <p>Yes. Write an action such as <code>[wave]</code>, <code>[wink]</code> or <code>[nod]</code> anywhere in a greeting or an answer, and the avatar performs it when the speech reaches that point. The tag itself is never spoken. Voice styles such as <code>[cheerful]</code> or <code>[sad]</code> change the face as well as the voice.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Can it laugh, sigh or whisper?</h3></summary>
+          <p>Yes. The voice makes more than fifty sounds that are not words: <code>[laugh]</code>, <code>[chuckle]</code>, <code>[gasp]</code>, <code>[sigh]</code>, <code>[yawn]</code>, <code>[hmm]</code>, <code>[whistle]</code>, <code>[sneeze]</code> and many more. Write the tag where the sound should come and the avatar acts it out as it is heard. It can speak while laughing with <code>[laughing]</code>, and whisper with <code>[whisper]</code>. In a chat you can simply ask: “do an evil laugh”, “speak slower”, or “whisper that”.</p>
+        </details>
+        <details class="faq-item">
           <summary><h3>What is AIML, and do I have to write it?</h3></summary>
-          <p>AIML is a simple XML format for chatbot rules: a pattern the visitor might type, and the answer the bot gives. You can start from a ready-made knowledge pack, add rules with a short form, or edit the XML directly. Chat is optional, and the avatar can simply greet visitors instead.</p>
+          <p>AIML is a simple XML format for chatbot rules: a pattern the visitor might type, and the answer the bot gives. You can start from a ready-made knowledge pack, add rules with a short form, or edit the XML directly. A built-in base brain already handles everyday small talk such as greetings, thanks and goodbyes, so you only write the answers that are about your site. Chat is optional, and the avatar can simply greet visitors instead.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Does the visitor have to type the exact words in my rules?</h3></summary>
+          <p>No. The bot understands typos, chat shorthand, other forms of a word and common synonyms, so “what are your fees?” reaches a rule written for “pricing”. If a question is worded in a way no rule expected, the bot picks the rule that covers most of what was asked, and when two rules fit equally well it offers both as suggestions. You can also fill in a few business facts, such as opening hours, email, phone and address, and the bot answers questions about them without any rules at all.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>What can it talk about besides my site?</h3></summary>
+          <p>Quite a lot. The built-in base brain chats about how your day is going, answers questions about itself honestly, tells jokes and riddles, runs a quick quiz, plays rock paper scissors, does sums such as “what’s 15% of 80?”, converts kilometres and pounds, knows the date and a few capitals, and remembers your name and what you like while the tab is open. It follows the thread too: after “what’s the capital of France?” you can simply ask “and Germany?”. When it does not know something it says so, and a request it cannot help with is pointed to your contact details.</p>
         </details>
         <details class="faq-item">
           <summary><h3>Which languages and browsers does it support?</h3></summary>

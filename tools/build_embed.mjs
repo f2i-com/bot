@@ -70,10 +70,15 @@ ${widgetSrc}
   }
 
   const BotComputer = {
-    version: "1.1.0",
+    version: "1.2.0",
     AIMLEngine,
     AVATAR_PRESETS,
+    AVATAR_ACTIONS,
     STARTER_AIML_PACKS,
+    BASE_AIML_XML,
+    BOT_FACTS,
+    VOICE_SOUND_TAGS,
+    parseSpeechCues,
     mount(config = {}) {
       const wasmUrl = config.wasmUrl || resolveDefaultWasmUrl(_capturedScript);
       return mountBotWidget({ ...config, wasmUrl }, { bindTTSFn: bindTTS });

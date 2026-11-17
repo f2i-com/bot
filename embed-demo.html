@@ -160,7 +160,7 @@
       </div>
       <div class="card">
         <h2>An AIML brain</h2>
-        <p>Press <strong>Ask</strong> on the companion to try pattern matching, wildcards, memory (<em>“My name is Alex”</em>) and quick-reply chips.</p>
+        <p>Press <strong>Ask</strong> on the companion to try pattern matching, wildcards, memory (<em>“My name is Alex”</em>) and quick-reply chips. Ask <em>“when are you open?”</em> to hear a fact it was simply given.</p>
       </div>
     </div>
   </main>
@@ -183,10 +183,15 @@
         chatEnabled: true,
         eyeTracking: true,
         showCaptions: true,
+        // Facts the bot answers about with no rules written. AcmeCloud is a made-up company.
+        facts: {
+          hours: "Monday to Friday, 9am to 6pm",
+          email: "hello@acmecloud.example",
+        },
       });
 
       document.getElementById("trigPitch").onclick = () => {
-        bot.say("[cheerful] Welcome to AcmeCloud! I run 100 percent in your browser with WebAssembly vocal tract physics and zero API bills!", "wave");
+        bot.say("[cheerful] Welcome to AcmeCloud! [wave] I run 100 percent in your browser with WebAssembly vocal tract physics and zero API bills! [chuckle] Not bad for a single file. [thumbsup]");
       };
       document.getElementById("trigAskPrice").onclick = () => {
         bot.ask("Pricing & Plans");
