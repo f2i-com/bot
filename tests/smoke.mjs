@@ -42,8 +42,21 @@ import {
   GLASSES_STYLES,
   HEADWEAR_STYLES,
   NECKWEAR_STYLES,
+  BROOCH_STYLES,
   drawBotAvatar,
 } from "../src/avatar-renderer.js";
+import {
+  PERSONALITIES,
+  PERSONA_SAYS,
+  BOT_NAMES,
+  normalizePersona,
+  randomPersona,
+  personaGreeting,
+  randomBotName,
+  describePersona,
+  stylizeReply,
+  personaToXml,
+} from "../src/persona.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -735,6 +748,159 @@ console.log("7. Testing general conversation: sets, maps, sums, games, memory an
   assert.ok(each < 8, `Replies should stay near-instant, took ${each.toFixed(2)} ms each`);
 }
 
+console.log("7b. Testing personalities: the same answers, said in character...");
+{
+  const xml = `<aiml>
+    <category><pattern># HOURS #</pattern><template>We're open from nine to five. I'm here until then!</template></category>
+    <category><pattern>HELP ME</pattern><template>I am happy to help. We do not close early, and I will stay as long as you need.</template></category>
+    <category persona="off"><pattern>MOTTO</pattern><template>We're Acme. It's what we do! [laugh]</template></category>
+    <category><pattern>HI</pattern><template><persona say="hello">Hello from the rules.</persona></template></category>
+    <category><pattern>TICKLE</pattern><template>That tickles, it really does! [laugh]</template></category>
+    <category><pattern>MOOD CHECK</pattern><template><condition name="personality"><li value="grumpy">Bah.</li><li>Yay.</li></condition></template></category>
+  </aiml>`;
+  const props = { name: "Juno", role: "Guide", company: "Acme" };
+  const make = (persona, random) => new AIMLEngine({ botProps: props, xml, baseXml: BASE_AIML_XML, persona, random });
+  const always = () => 0; // every habit that could happen does
+  const pv = new TTS("female");
+
+  // No personality: every reply is exactly as written.
+  const plain = make(null);
+  assert.equal(plain.persona, null);
+  assert.equal(plain.reply("what are your hours").displayText, "We're open from nine to five. I'm here until then!");
+  assert.equal(plain.reply("hi").displayText, "Hello from the rules.");
+  assert.equal(plain.reply("mood check").displayText, "Yay.");
+
+  // Formality: a formal character spells contractions out, a casual one draws them together.
+  const formal = make({ id: "professional", chattiness: 0 });
+  assert.equal(formal.reply("what are your hours").displayText, "We are open from nine to five. I am here until then!");
+  const casual = make({ id: "laidback", chattiness: 0 });
+  assert.equal(casual.reply("help me").displayText, "I'm happy to help. We don't close early, and I'll stay as long as you need.");
+  assert.equal(stylizeReply("Yes, I am. It's been fun, and that's that.", normalizePersona({ id: "laidback", chattiness: 0 }), { rng: () => 1 }), "Yes, I am. It's been fun, and that's that.");
+  assert.equal(stylizeReply("It's been fun. That's all, isn't it?", normalizePersona({ id: "professional", chattiness: 0 }), { rng: () => 1 }), "It has been fun. That is all, is it not?");
+  assert.equal(stylizeReply("Isn't that great? Don't worry, I can't stay.", normalizePersona({ id: "professional", chattiness: 0 }), { rng: () => 1 }), "Is that not great? Do not worry, I cannot stay.");
+
+  // Energy: a calm character does not exclaim and speaks calmly; a lively one does both.
+  const calm = make({ id: "calm", chattiness: 0 });
+  const calmHours = calm.reply("what are your hours");
+  assert.equal(calmHours.displayText, "We're open from nine to five. I'm here until then.");
+  assert.ok(calmHours.speechText.startsWith("[calm] "), calmHours.speechText);
+  assert.equal(stylizeReply("[cheerful] Come in! [excited] It is great.", normalizePersona({ id: "grumpy", chattiness: 0 }), { rng: () => 1 }), "[calm] Come in. [calm] It is great.");
+  assert.equal(stylizeReply("That is Paris.", normalizePersona({ id: "bubbly", chattiness: 0, delivery: "" }), { rng: () => 1 }), "That's Paris!");
+
+  // Habits: something it tends to say first, or last, and a catchphrase now and then.
+  const opens = make({ id: "bubbly", chattiness: 1, openers: "Ooh!", closers: "Ta-da!" }, always);
+  const opened = opens.reply("what are your hours");
+  assert.ok(opened.displayText.startsWith("Ooh! We're open from nine to five."), opened.displayText);
+  assert.ok(opened.speechText.startsWith("[cheerful] Ooh! "), opened.speechText);
+  const closes = make({ id: "friendly", chattiness: 1, openers: "", closers: "Ta-da!" }, always);
+  assert.ok(closes.reply("what are your hours").displayText.endsWith("until then! Ta-da!"));
+  const catches = make({ id: "friendly", chattiness: 1, openers: "", closers: "", catchphrase: "Splendid." }, always);
+  const four = [1, 2, 3, 4].map(() => catches.reply("what are your hours").displayText);
+  assert.deepEqual(four.map((t) => t.endsWith("Splendid.")), [false, false, false, true]);
+  assert.equal(stylizeReply("We are open all day.", normalizePersona({ id: "shy", chattiness: 1, openers: "Um,", formality: 0.5 }), { kind: "answer", rng: always }).replace(/ \[\w+\]$/, ""), "[soft] Um, we are open all day.");
+  // What the engine remembers of the conversation is the reply as the rules wrote it.
+  assert.equal(opens.lastBotThat, "I'm here until then!");
+
+  // Its own laugh: the sound a rule asks for becomes the character's, and a serious one does not laugh.
+  assert.ok(make({ id: "friendly", laugh: "hoho", chattiness: 0 }).reply("tickle").speechText.includes("[hoho]"));
+  assert.ok(!/\[(laugh|chuckle|hoho)/.test(make({ id: "professional", chattiness: 0 }).reply("tickle").speechText));
+  // ...but a sound that was asked for, and anything marked persona="off", is left exactly as it is.
+  const hearty = make({ id: "dramatic", laugh: "hoho", chattiness: 1 }, always);
+  assert.ok(hearty.reply("do an evil laugh").speechText.startsWith("[evil]"));
+  assert.ok(/^\[giggle\]/.test(hearty.reply("giggle").speechText));
+  assert.equal(formal.reply("motto").displayText, "We're Acme. It's what we do!");
+  assert.ok(formal.reply("motto").speechText.includes("[laugh]"));
+
+  // In its own words: where a rule says <persona say="...">, the character's line is used.
+  for (const type of PERSONALITIES) {
+    const bot = make(type.id);
+    assert.equal(bot._personaSays.size, PERSONA_SAYS.length, `${type.id} should have a line for every moment`);
+    const hello = bot.reply("hi");
+    assert.notEqual(hello.displayText, "Hello from the rules.", type.id);
+    assert.equal(hello.matchedLayer, "custom");
+    const howAreYou = bot.reply("how are you");
+    assert.ok(howAreYou.displayText.endsWith("How about you?"), `${type.id}: ${howAreYou.displayText}`);
+    assert.notEqual(bot.reply("good thanks").matchKind, "fallback", `${type.id}: the answer to "how about you?" should still be understood`);
+    assert.ok(bot.reply("what is your personality").displayText.length > 8);
+    // Every line and greeting is something the voice can say, with nothing read out as a tag.
+    for (const text of [...Object.values(type.says).flat(), ...type.greetings, ...type.openers, ...type.closers, ...type.catchphrases]) {
+      const filled = personaGreeting({ id: type.id }, props, () => 0) && text.replace(/\{bot\}/g, "Juno").replace(/\{role\}/g, "Guide").replace(/\{company\}/g, "Acme").replace(/\{daypart\}/g, "morning").replace(/\{,user\}/g, ", Sam");
+      const parsed = parseSpeechCues(filled);
+      const spokenWords = pv.speakScript(parsed.speechText).words;
+      assert.equal(parsed.wordCount, spokenWords.length, `${type.id}: "${filled}" -> ${spokenWords.map((w) => w.word).join(" ")}`);
+      for (const tag of filled.match(/\[[^\]]+\]/g) || []) assert.ok(!stripSpeechTags(filled).includes(tag), tag);
+    }
+  }
+  const knowsYou = make("friendly");
+  knowsYou.reply("my name is sam");
+  assert.ok(/, Sam[!.?]/.test(knowsYou.reply("hi").displayText), "It uses the visitor's name once it knows it");
+  assert.ok(/, mate[!.?]/.test(make({ id: "laidback", petName: "mate" }).reply("hi").displayText), "Otherwise, what it calls people");
+  assert.ok(/sorry/i.test(make("shy").reply("what is a zorbleflux made of").displayText));
+  assert.equal(make("grumpy").reply("mood check").displayText, "Bah.");
+
+  // A game, a riddle or any exchange that hangs on the last line is not decorated.
+  assert.ok(/Knock knock/.test(opens.reply("tell me a knock knock joke").displayText));
+  const whoIsThere = opens.reply("who's there");
+  assert.ok(!/Ooh!|Ta-da!/.test(whoIsThere.displayText) && whoIsThere.matchKind !== "fallback", whoIsThere.displayText);
+  // Neither is a reply to someone who is upset, and a voice the visitor asked for wins.
+  const upset = opens.reply("i am so sad today");
+  assert.ok(!/Ooh!|Ta-da!/.test(upset.displayText) && !upset.speechText.startsWith("[cheerful]"), upset.speechText);
+  opens.reply("speak slower please");
+  const slow = opens.reply("what are your hours");
+  assert.ok(slow.speechText.startsWith("[slow] ") && !slow.speechText.includes("[cheerful]"), slow.speechText);
+  // Gestures still line up with the voice after a reply has been restyled.
+  for (const id of ["professional", "bubbly", "grumpy"]) {
+    const res = make({ id, chattiness: 1 }, always).reply("help me");
+    assert.equal(res.cueWords, pv.speakScript(res.speechText).words.length, `${id}: ${res.speechText}`);
+  }
+
+  // A personality can be written in the AIML itself, and that wins over the one that was given.
+  const written = new AIMLEngine({
+    botProps: props,
+    baseXml: BASE_AIML_XML,
+    persona: "bubbly",
+    xml: `<aiml>
+      <persona id="grumpy" chattiness="0" laugh="hoho" petname="pal">
+        <opener>Fine.</opener><opener>Right.</opener>
+        <say name="hello"><li>Oh, it is <bot name="name"/><condition name="callsyou"><li value="*">, <get name="callsyou"/></li></condition>. What?</li></say>
+      </persona>
+      <category><pattern>TICKLE</pattern><template>Stop that. [laugh]</template></category>
+    </aiml>`,
+  });
+  assert.equal(written.persona.id, "grumpy");
+  assert.deepEqual([written.persona.laugh, written.persona.petName, written.persona.openers], ["hoho", "pal", ["Fine.", "Right."]]);
+  assert.equal(written.reply("hello").displayText, "Oh, it is Juno, pal. What?");
+  assert.ok(written.reply("tickle").speechText.includes("[hoho]"));
+  const checked = inspectAimlXml(`<aiml>${personaToXml(normalizePersona({ id: "witty", says: { hello: "Well, well{,user}. [wink]" } }))}
+    <category persona="off"><pattern>A</pattern><template><persona say="thanks">Sure.</persona></template></category></aiml>`, props, { baseXml: BASE_AIML_XML });
+  assert.ok(checked.valid && checked.warnings.length === 0, JSON.stringify(checked.warnings));
+  assert.equal(checked.engine.persona.id, "witty");
+  assert.equal(checked.engine.reply("hello").displayText, "Well, well.");
+  // Taking it away again restores the plain replies.
+  written.setPersona(null);
+  assert.equal(make("bubbly").setPersona(null), null);
+
+  // The generator's parts: a personality, a name and a greeting that go together.
+  for (let i = 0; i < 200; i++) {
+    const persona = randomPersona();
+    assert.deepEqual(normalizePersona(persona), persona, "A generated personality is already clean");
+    assert.ok(PERSONALITIES.some((t) => t.id === persona.id) && persona.openers.length && persona.closers.length);
+    for (const key of ["energy", "formality", "playfulness", "chattiness"]) assert.ok(persona[key] >= 0 && persona[key] <= 1);
+    const style = ["feminine", "masculine", "neutral"][i % 3];
+    const name = randomBotName(style, Math.random, "Aria");
+    assert.ok(name !== "Aria" && [...BOT_NAMES[style], ...BOT_NAMES.neutral].includes(name), name);
+    const greeting = personaGreeting(persona, { name, role: "Guide", company: "Acme" });
+    assert.ok(greeting.includes(name) && !/[{}]/.test(greeting), greeting);
+    assert.ok(describePersona(persona).startsWith(PERSONALITIES.find((t) => t.id === persona.id).label));
+  }
+  assert.equal(new Set(Object.values(BOT_NAMES).flat()).size, Object.values(BOT_NAMES).flat().length, "No name is listed twice");
+  assert.equal(normalizePersona(null), null);
+  assert.equal(normalizePersona({ id: "nope", energy: 9, laugh: "moo", openers: ["  A  ", "A", ""] }).id, "friendly");
+  assert.deepEqual(normalizePersona({ id: "calm", energy: 9, laugh: "moo", openers: ["  A  ", "A", ""] }), { ...normalizePersona("calm"), energy: 1, openers: ["A"] });
+  for (const preset of AVATAR_PRESETS) assert.ok(PERSONALITIES.some((t) => t.id === preset.persona), `${preset.name} should start with a personality`);
+  pv.free();
+}
+
 console.log("8. Testing the new avatar options draw without errors...");
 {
   // A recording stand-in for a 2D canvas context: every call is accepted, gradients included.
@@ -765,6 +931,10 @@ console.log("8. Testing the new avatar options draw without errors...");
   for (const g of GLASSES_STYLES) draw({ glasses: g.id });
   for (const hw of HEADWEAR_STYLES) for (const h of ["long_waves", "braids", "afro", "none"]) draw({ headwear: hw.id, hairStyle: h });
   for (const bg of ["violet_haze", "mint_fresh", "graphite"]) draw({ bgStyle: bg, ageLines: 1, beautyMark: true });
+  for (const b of BROOCH_STYLES) draw({ brooch: b.id, framing: "half", dimples: 1, eyeliner: 1, noseStud: true, irisColor2: "#7c5836" });
+  for (const id of ["pigtails", "space_buns", "mohawk"]) assert.ok(HAIR_STYLES.some((h) => h.id === id), id);
+  for (const id of ["tee", "shirt", "cardigan", "jacket"]) assert.ok(OUTFIT_STYLES.some((o) => o.id === id), id);
+  for (const id of ["bow", "flower", "tiara", "fedora", "chef"]) assert.ok(HEADWEAR_STYLES.some((h) => h.id === id), id);
   assert.ok(NECKWEAR_STYLES.some((n) => n.id === "lanyard") && HEADWEAR_STYLES.some((n) => n.id === "headscarf"));
 
   // Idle life: left alone, the avatar makes a small movement of its own; it can be switched off.
@@ -792,5 +962,11 @@ assert.equal(typeof sandbox.BotComputer.mount, "function");
 assert.equal(sandbox.BotComputer.AVATAR_PRESETS.length, AVATAR_PRESETS.length);
 assert.equal(sandbox.BotComputer.BOT_FACTS.length, BOT_FACTS.length, "The SDK lists the business facts a bot can be given");
 assert.equal(sandbox.BotComputer.VOICE_SOUND_TAGS.length, VOICE_SOUND_TAGS.length, "The SDK lists the sounds the voice performs");
+assert.equal(sandbox.BotComputer.PERSONALITIES.length, PERSONALITIES.length, "The SDK lists the personalities");
+assert.equal(typeof sandbox.BotComputer.randomPersona().id, "string");
+{
+  const sdkBot = new sandbox.BotComputer.AIMLEngine({ baseXml: sandbox.BotComputer.BASE_AIML_XML, xml: "<aiml></aiml>", persona: "professional" });
+  assert.ok(/I am|How may I/.test(sdkBot.reply("hello").displayText), "A personality works in the standalone bundle");
+}
 
 console.log("✓ All bot.computer smoke tests passed!");

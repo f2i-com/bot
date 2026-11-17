@@ -625,6 +625,9 @@ const HAIR_STYLES = [
   { id: "ponytail", label: "Ponytail" },
   { id: "afro", label: "Afro" },
   { id: "braids", label: "Twin Braids" },
+  { id: "pigtails", label: "Pigtails" },
+  { id: "space_buns", label: "Space Buns" },
+  { id: "mohawk", label: "Mohawk" },
   { id: "buzz", label: "Clean Buzz Fade" },
   { id: "none", label: "Smooth / Bald" },
 ];
@@ -638,6 +641,10 @@ const OUTFIT_STYLES = [
   { id: "polo", label: "Polo Shirt" },
   { id: "scoop", label: "Scoop-Neck Top" },
   { id: "apron", label: "Barista Apron" },
+  { id: "tee", label: "Graphic Tee" },
+  { id: "shirt", label: "Button-Up Shirt" },
+  { id: "cardigan", label: "Cozy Cardigan" },
+  { id: "jacket", label: "Zip Jacket" },
   { id: "cyber", label: "Android Chassis" },
 ];
 const GLASSES_STYLES = [
@@ -677,6 +684,11 @@ const HEADWEAR_STYLES = [
   { id: "beret", label: "Beret" },
   { id: "headphones", label: "Headphones" },
   { id: "headscarf", label: "Headscarf" },
+  { id: "bow", label: "Hair Bow" },
+  { id: "flower", label: "Flower" },
+  { id: "tiara", label: "Tiara" },
+  { id: "fedora", label: "Fedora" },
+  { id: "chef", label: "Chef's Hat" },
 ];
 const NECKWEAR_STYLES = [
   { id: "none", label: "None" },
@@ -684,6 +696,13 @@ const NECKWEAR_STYLES = [
   { id: "bowtie", label: "Bow Tie" },
   { id: "scarf", label: "Scarf" },
   { id: "lanyard", label: "Lanyard & ID Badge" },
+];
+const BROOCH_STYLES = [
+  { id: "none", label: "None" },
+  { id: "round", label: "Round Pin" },
+  { id: "star", label: "Star" },
+  { id: "heart", label: "Heart" },
+  { id: "flower", label: "Flower" },
 ];
 
 /** Gestures and expressions that can be triggered directly or written inline as `[wave]`, `[wink]`, ... */
@@ -789,10 +808,17 @@ const DEFAULT_AVATAR = {
   fringe: false, // straight bangs across the forehead
   ageLines: 0.0, // 0 .. 1 (laugh lines, crow's feet, forehead lines)
   beautyMark: false,
+  dimples: 0.0, // 0 .. 1
+  eyeliner: 0.0, // 0 .. 1 (a winged line at the outer corner of each eye)
+  noseStud: false, // a small stud in the earring metal
+  irisColor2: "", // "" = both eyes the same; otherwise the colour of the second eye
+  brooch: "none", // "none" | "round" | "star" | "heart" | "flower"
+  broochColor: "#e6c35c",
 };
 const AVATAR_PRESETS = [
   {
     id: "aria",
+    persona: "friendly",
     name: "Aria",
     role: "Website Concierge",
     tagline: "Classic SitePal hostess with headset & warm soprano voice",
@@ -803,6 +829,7 @@ const AVATAR_PRESETS = [
   },
   {
     id: "marcus",
+    persona: "professional",
     name: "Marcus",
     role: "Executive Advisor",
     tagline: "Broad-shouldered tailored suit & confident baritone",
@@ -853,6 +880,7 @@ const AVATAR_PRESETS = [
   },
   {
     id: "chloe",
+    persona: "bubbly",
     name: "Chloe",
     role: "Product Support",
     tagline: "Friendly studio sweater, round frames & lively voice",
@@ -891,6 +919,7 @@ const AVATAR_PRESETS = [
   },
   {
     id: "viktor",
+    persona: "calm",
     name: "Viktor",
     role: "Solutions Architect",
     tagline: "Minimalist turtleneck, sculpted beard & resonant voice",
@@ -933,6 +962,7 @@ const AVATAR_PRESETS = [
   },
   {
     id: "nova",
+    persona: "witty",
     name: "Nova-7",
     role: "Cybernetic Companion",
     tagline: "Synth-porcelain android chassis, holo visor & crisp vocal tract",
@@ -970,6 +1000,7 @@ const AVATAR_PRESETS = [
   },
   {
     id: "arthur",
+    persona: "curious",
     name: "Prof. Arthur",
     role: "Knowledge Curator",
     tagline: "Distinguished scholar with classic mustache & warm timbre",
@@ -1937,7 +1968,7 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
 
   // A beanie or cap covers the top of the head, so hair above its edge must not be drawn.
   const headwear = avatar.headwear || "none";
-  const hatOn = headwear === "beanie" || headwear === "cap" || headwear === "beret";
+  const hatOn = headwear === "beanie" || headwear === "cap" || headwear === "beret" || headwear === "fedora" || headwear === "chef";
   const hatLine = -m.headH * 0.56 - 5;
   const clipBelowHat = () => {
     if (!hatOn) return;
@@ -1996,6 +2027,36 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     ctx.bezierCurveTo(m.headW + 12 + sway * 0.6, 26, m.headW + 6, -6, m.headW * 0.2, tailTop + 14);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+  }
+  if (avatar.hairStyle === "pigtails") {
+    // Two bunches tied at the sides, falling behind the shoulders.
+    ctx.save();
+    ctx.translate(-yawX * 0.42, nodY * 0.65);
+    ctx.rotate(headTilt * 0.55);
+    clipBelowHat();
+    const sway = Math.sin(timeSec * 1.6) * 1.4 + xv("shake") * Math.sin(timeSec * 13 - 0.6) * 4;
+    const tieY = 4;
+    const endY = m.shoulderY + 30;
+    for (const dir of [-1, 1]) {
+      const x0 = dir * (m.headW - 3);
+      const tailGrad = ctx.createLinearGradient(0, tieY - 10, 0, endY);
+      tailGrad.addColorStop(0, rgbStr(shadeRgb(hairRgb, 1.02)));
+      tailGrad.addColorStop(1, rgbStr(shadeRgb(hairRgb, 0.58)));
+      ctx.fillStyle = tailGrad;
+      ctx.beginPath();
+      ctx.moveTo(x0, tieY - 12);
+      ctx.bezierCurveTo(x0 + dir * 34, tieY - 12, x0 + dir * 40 + sway, endY - 36, x0 + dir * 24 + sway, endY - 6);
+      ctx.quadraticCurveTo(x0 + dir * 15 + sway, endY + 7, x0 + dir * 6 + sway, endY - 8);
+      ctx.bezierCurveTo(x0 + dir * 12, endY - 40, x0 + dir * 5, tieY + 24, x0 - dir * 3, tieY + 10);
+      ctx.closePath();
+      ctx.fill();
+      // the tie that gathers each bunch
+      ctx.fillStyle = rgbStr(outAccRgb);
+      ctx.beginPath();
+      ctx.ellipse(x0 + dir * 12.5, tieY + 3, 4.4, 7, dir * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
   if (avatar.hairStyle === "long_waves" || avatar.hairStyle === "shoulder_lob" || avatar.hairStyle === "sleek_bob" || avatar.hairStyle === "long_straight" || avatar.hairStyle === "braids" || isHalo) {
@@ -2420,6 +2481,141 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     ctx.beginPath();
     ctx.roundRect(-13, bibTop + 14, 26, 4, 2);
     ctx.fill();
+  } else if (outfit === "tee") {
+    // Crew-neck T-shirt with a ribbed collar and a round print on the chest
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.quadraticCurveTo(0, sy + 15, m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 0.78));
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 2, sy - 2);
+    ctx.quadraticCurveTo(0, sy + 17, m.neckHalfW + 2, sy - 2);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outAccRgb, 0.94);
+    ctx.beginPath();
+    ctx.arc(0, sy + 50, 10.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = rgbStr(outSecRgb, 0.92);
+    ctx.beginPath();
+    ctx.arc(0, sy + 50, 4.6, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (outfit === "shirt") {
+    // Open-collar shirt: buttons down the front under two collar points, and a chest pocket
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.lineTo(0, sy + 20);
+    ctx.lineTo(m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 0.68), 0.75);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, sy + 20);
+    ctx.lineTo(0, hipY);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outSecRgb);
+    for (let by = sy + 32; by < hipY - 4; by += 15) {
+      ctx.beginPath();
+      ctx.arc(0, by, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 0.68), 0.65);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(-m.chestHalfW * 0.66, sy + 40, 15, 16, 2);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(shadeRgb(outPriRgb, 1.22));
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.18)";
+    ctx.lineWidth = 0.9;
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(dir * (m.neckHalfW + 2), sy - 6);
+      ctx.lineTo(dir * (m.neckHalfW + 15), sy + 12);
+      ctx.lineTo(dir * 4, sy + 25);
+      ctx.lineTo(0, sy + 19);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (outfit === "cardigan") {
+    // An open cardigan over a top: a deep V edged with a ribbed band, and buttons below it
+    const vBottom = sy + 62;
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.quadraticCurveTo(0, sy + 14, m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = rgbStr(outSecRgb);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 4, sy - 2);
+    ctx.lineTo(0, vBottom);
+    ctx.lineTo(m.neckHalfW + 4, sy - 2);
+    ctx.quadraticCurveTo(0, sy + 15, -m.neckHalfW - 4, sy - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 1.3));
+    ctx.lineWidth = 5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 5, sy - 3);
+    ctx.lineTo(0, vBottom);
+    ctx.lineTo(m.neckHalfW + 5, sy - 3);
+    ctx.moveTo(0, vBottom);
+    ctx.lineTo(0, hipY);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outAccRgb);
+    for (let by = vBottom + 13; by < hipY - 4; by += 16) {
+      ctx.beginPath();
+      ctx.arc(0, by, 2.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (outfit === "jacket") {
+    // Zip-up jacket: a stand collar, the top underneath showing at the neck, a zip down the middle
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.quadraticCurveTo(0, sy + 14, m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = rgbStr(outSecRgb);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 2, sy - 2);
+    ctx.lineTo(0, sy + 32);
+    ctx.lineTo(m.neckHalfW + 2, sy - 2);
+    ctx.quadraticCurveTo(0, sy + 14, -m.neckHalfW - 2, sy - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = rgbStr(shadeRgb(outPriRgb, 1.22));
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
+    ctx.lineWidth = 0.9;
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(dir * (m.neckHalfW + 3), sy - 10);
+      ctx.quadraticCurveTo(dir * (m.neckHalfW + 16), sy - 2, dir * (m.neckHalfW + 13), sy + 11);
+      ctx.lineTo(0, sy + 33);
+      ctx.lineTo(dir * (m.neckHalfW - 1), sy + 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.strokeStyle = rgbStr(outAccRgb, 0.95);
+    ctx.lineWidth = 2;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.moveTo(0, sy + 33);
+    ctx.lineTo(0, hipY);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outAccRgb);
+    ctx.beginPath();
+    ctx.roundRect(-2.8, sy + 31, 5.6, 9.5, 1.8);
+    ctx.fill();
   } else if (outfit === "cyber") {
     // Glowing chest arc / synth telemetry lines
     ctx.strokeStyle = rgbStr(outAccRgb, 0.75);
@@ -2446,6 +2642,44 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     ctx.fillStyle = rgbStr(outAccRgb);
     ctx.beginPath();
     ctx.roundRect(m.chestHalfW * 0.36, sy + 24, 15, 5.5, 2.5);
+    ctx.fill();
+  }
+
+  // A brooch on the other side of the chest
+  const brooch = avatar.brooch || "none";
+  if (brooch !== "none" && outfit !== "cyber") {
+    const pinRgb = parseHex(avatar.broochColor, [230, 195, 92]);
+    const bx = -m.chestHalfW * 0.4;
+    const by = sy + 29;
+    ctx.fillStyle = rgbStr(pinRgb);
+    ctx.strokeStyle = rgbStr(shadeRgb(pinRgb, 0.62), 0.8);
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    if (brooch === "star") {
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 ? 2.9 : 6.6;
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        ctx[i ? "lineTo" : "moveTo"](bx + Math.cos(a) * r, by + Math.sin(a) * r);
+      }
+      ctx.closePath();
+    } else if (brooch === "heart") {
+      ctx.moveTo(bx, by + 5.8);
+      ctx.bezierCurveTo(bx - 9.5, by - 0.5, bx - 4.4, by - 7.6, bx, by - 2.6);
+      ctx.bezierCurveTo(bx + 4.4, by - 7.6, bx + 9.5, by - 0.5, bx, by + 5.8);
+    } else if (brooch === "flower") {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        ctx.moveTo(bx + Math.cos(a) * 3.9 + 3, by + Math.sin(a) * 3.9);
+        ctx.arc(bx + Math.cos(a) * 3.9, by + Math.sin(a) * 3.9, 3, 0, Math.PI * 2);
+      }
+    } else {
+      ctx.arc(bx, by, 4.8, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = brooch === "flower" ? rgbStr(shadeRgb(pinRgb, 0.6)) : "rgba(255, 255, 255, 0.55)";
+    ctx.beginPath();
+    ctx.arc(brooch === "flower" ? bx : bx - 1.4, brooch === "flower" ? by : by - 1.6, brooch === "flower" ? 2.2 : 1.2, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -2591,7 +2825,7 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
   ctx.rotate(headTilt);
 
   // Back crown hair for shorter masculine/cropped styles
-  if (avatar.hairStyle === "side_sweep" || avatar.hairStyle === "quiff" || avatar.hairStyle === "pixie" || avatar.hairStyle === "buzz" || avatar.hairStyle === "updo_bun" || avatar.hairStyle === "ponytail") {
+  if (["side_sweep", "quiff", "pixie", "buzz", "updo_bun", "ponytail", "pigtails", "space_buns", "mohawk"].includes(avatar.hairStyle)) {
     const chGrad = ctx.createLinearGradient(0, -m.headH - 28, 0, 18);
     chGrad.addColorStop(0, rgbStr(shadeRgb(hairRgb, 1.15)));
     chGrad.addColorStop(1, rgbStr(shadeRgb(hairRgb, 0.62)));
@@ -2605,7 +2839,15 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
       ctx.fill();
     }
 
-    const pad = avatar.hairStyle === "buzz" ? 2.2 : 5.5;
+    if (avatar.hairStyle === "space_buns") {
+      for (const dir of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(dir * m.headW * 0.7 - yawX * 0.35, -m.headH - 8, 15 * m.headScale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    const pad = avatar.hairStyle === "buzz" || avatar.hairStyle === "mohawk" ? 2.2 : 5.5;
     ctx.beginPath();
     ctx.moveTo(-m.headW - pad, -10);
     ctx.bezierCurveTo(-m.headW - pad - 4, -m.headH - 14, m.headW + pad + 4, -m.headH - 14, m.headW + pad, -10);
@@ -2833,7 +3075,9 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
   const browLift = clamp(anim.pitchSt * 0.85 + anim.energy * 2.4 + xv("browUp") * 5.2, -2.5, 8.5);
   const shadowAmt = clamp(avatar.eyeshadow ?? 0, 0, 1);
   const shadowRgb = parseHex(avatar.eyeshadowColor, [122, 92, 143]);
-  const irisRgb = parseHex(avatar.irisColor, [59, 130, 166]);
+  const irisFirstRgb = parseHex(avatar.irisColor, [59, 130, 166]);
+  const irisSecondRgb = avatar.irisColor2 ? parseHex(avatar.irisColor2, irisFirstRgb) : irisFirstRgb;
+  const linerAmt = clamp(avatar.eyeliner ?? 0, 0, 1);
 
   for (const dir of [-1, 1]) {
     const ex = dir * eyeSpan;
@@ -2843,6 +3087,7 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     const openH = Math.max(0.55, 6.2 * eyeSc * (1 + eyeWide * 0.34) * (1 - blinkAmt * 0.94));
     const ew = 11.4 * eyeSc;
     const outerLift = -tilt * 5.5;
+    const irisRgb = dir === 1 ? irisSecondRgb : irisFirstRgb;
 
     // Orbital socket shading
     const sockGrad = ctx.createRadialGradient(ex, ey - 1, 2, ex, ey - 1, 15 * eyeSc);
@@ -2936,6 +3181,16 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     );
     ctx.stroke();
 
+    // Eyeliner: the lash line carried out past the corner of the eye in a small wing
+    if (linerAmt > 0.02) {
+      ctx.strokeStyle = `rgba(23, 20, 31, ${0.6 + linerAmt * 0.4})`;
+      ctx.lineWidth = (1.2 + linerAmt * 1.5) * Math.sqrt(eyeSc);
+      ctx.beginPath();
+      ctx.moveTo(ex + dir * (ew - 3), ey - 0.6 + outerLift * 0.8);
+      ctx.quadraticCurveTo(ex + dir * (ew + 1.5), ey - 0.2 + outerLift, ex + dir * (ew + 2.6 + linerAmt * 3.6), ey - 1.4 - linerAmt * 3 + outerLift);
+      ctx.stroke();
+    }
+
     // Sculpted, tapered eyebrow
     const browSc = clamp(avatar.browThickness ?? 1, 0.5, 1.65);
     const arch = clamp(avatar.browArch ?? 0.2, -0.2, 0.6) * 10;
@@ -2984,6 +3239,18 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
   for (const dir of [-1, 1]) {
     ctx.beginPath();
     ctx.ellipse(dir * 4.5 * noseW, tipY + 1.1, 2.2 * noseW, 1.1, dir * -0.28, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (avatar.noseStud) {
+    const studRgb = parseHex(avatar.earringColor, [230, 195, 92]);
+    ctx.fillStyle = rgbStr(studRgb);
+    ctx.beginPath();
+    ctx.arc(7.4 * noseW, tipY - 2.2, 1.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+    ctx.beginPath();
+    ctx.arc(7.0 * noseW, tipY - 2.6, 0.5, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -3133,6 +3400,21 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     ctx.fill();
   }
 
+  // Dimples: a small crease beside each corner of the mouth, deeper in a smile
+  const dimpleAmt = clamp(avatar.dimples ?? 0, 0, 1);
+  if (dimpleAmt > 0.02) {
+    ctx.strokeStyle = rgbStr(skinDeep, (0.18 + dimpleAmt * 0.34) * clamp(0.65 + smileLift * 0.1, 0.6, 1.25));
+    ctx.lineWidth = 1.3;
+    ctx.lineCap = "round";
+    for (const dir of [-1, 1]) {
+      const dx = dir * (halfW + 5.4 * m.headScale);
+      ctx.beginPath();
+      ctx.moveTo(dx - dir * 0.6, cornerY - 4.4 * m.headScale);
+      ctx.quadraticCurveTo(dx + dir * 2.8, cornerY, dx - dir * 0.4, cornerY + 4.8 * m.headScale);
+      ctx.stroke();
+    }
+  }
+
   if (openH < 1.25) {
     ctx.strokeStyle = "rgba(68, 20, 32, 0.66)";
     ctx.lineWidth = 1.35;
@@ -3265,8 +3547,26 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
       ctx.bezierCurveTo(-m.headW - 4, -m.headH - 8, m.headW + 4, -m.headH - 8, m.headW + 1.5, -12);
       ctx.quadraticCurveTo(m.headW - 5, -42 * m.headScale, 0, -46 * m.headScale);
       ctx.quadraticCurveTo(-m.headW + 5, -42 * m.headScale, -m.headW - 1.5, -12);
+    } else if (hs === "mohawk") {
+      // Cropped sides, drawn faintly like a buzz cut, under a tall crest down the middle
+      ctx.fillStyle = rgbStr(hairRgb, 0.55);
+      ctx.moveTo(-m.headW - 1.5, -12);
+      ctx.bezierCurveTo(-m.headW - 4, -m.headH - 8, m.headW + 4, -m.headH - 8, m.headW + 1.5, -12);
+      ctx.quadraticCurveTo(m.headW - 5, -42 * m.headScale, 0, -46 * m.headScale);
+      ctx.quadraticCurveTo(-m.headW + 5, -42 * m.headScale, -m.headW - 1.5, -12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = fGrad;
+      const crestHalf = m.headW * 0.3;
+      const crestTop = -m.headH - 31;
+      ctx.beginPath();
+      ctx.moveTo(-crestHalf, -43 * m.headScale);
+      ctx.bezierCurveTo(-crestHalf - 5, -m.headH - 6, -crestHalf - 1, crestTop + 8, -crestHalf * 0.45, crestTop);
+      ctx.quadraticCurveTo(1, crestTop - 6, crestHalf * 0.6, crestTop + 3);
+      ctx.bezierCurveTo(crestHalf + 4, crestTop + 10, crestHalf + 5, -m.headH - 6, crestHalf, -43 * m.headScale);
+      ctx.quadraticCurveTo(0, -49 * m.headScale, -crestHalf, -43 * m.headScale);
     } else {
-      // side_sweep, pixie, updo_bun, ponytail
+      // side_sweep, pixie, updo_bun, ponytail, pigtails, space_buns
       ctx.moveTo(-m.headW - 5, -10);
       ctx.bezierCurveTo(-m.headW - 10, -m.headH - 15, -20, -m.headH - 22, 6, -m.headH - 19);
       ctx.bezierCurveTo(32, -m.headH - 16, m.headW + 10, -m.headH - 10, m.headW + 5, -10);
@@ -3281,7 +3581,7 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     ctx.fill();
 
     // Straight fringe across the forehead, ending just above the brows
-    if (avatar.fringe && hs !== "buzz") {
+    if (avatar.fringe && hs !== "buzz" && hs !== "mohawk") {
       const fTop = -m.headH * 0.82;
       const fBottom = -35 * m.headScale;
       const fHalf = m.headW - 3;
@@ -3299,7 +3599,7 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
     ctx.restore();
 
     // Specular hair crown ribbon
-    if (hs !== "buzz" && !hatOn) {
+    if (hs !== "buzz" && hs !== "mohawk" && !hatOn) {
       ctx.strokeStyle = rgbStr(hairHiRgb, 0.34);
       ctx.lineWidth = 2.8;
       ctx.lineCap = "round";
@@ -3380,6 +3680,145 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
         ctx.roundRect(cupX - dir * 6.5 - 2, -14, 4, 25, 2);
         ctx.fill();
       }
+    } else if (headwear === "bow") {
+      // A ribbon bow worn to one side of the crown
+      ctx.save();
+      ctx.translate(m.headW * 0.5, -m.headH - 7);
+      ctx.rotate(0.3);
+      for (const dir of [-1, 1]) {
+        const loopGrad = ctx.createLinearGradient(0, -10, dir * 18, 10);
+        loopGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 0.8)));
+        loopGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 1.16)));
+        ctx.fillStyle = loopGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(dir * 6, -13, dir * 20, -12, dir * 18, 0);
+        ctx.bezierCurveTo(dir * 20, 12, dir * 6, 13, 0, 0);
+        ctx.fill();
+      }
+      ctx.fillStyle = rgbStr(shadeRgb(wearRgb, 0.68));
+      ctx.beginPath();
+      ctx.roundRect(-3.8, -4.8, 7.6, 9.6, 2.6);
+      ctx.fill();
+      ctx.restore();
+    } else if (headwear === "flower") {
+      // A flower tucked above one ear
+      const fx = -m.headW * 0.86;
+      const fy = -m.headH * 0.5;
+      ctx.fillStyle = rgbStr(wearRgb);
+      ctx.strokeStyle = rgbStr(shadeRgb(wearRgb, 0.7), 0.7);
+      ctx.lineWidth = 0.7;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        ctx.beginPath();
+        ctx.ellipse(fx + Math.cos(a) * 6.4, fy + Math.sin(a) * 6.4, 5.4, 3.7, a, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#f2c94c";
+      ctx.beginPath();
+      ctx.arc(fx, fy, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (headwear === "tiara") {
+      // A slim band across the hair with three points and a jewel
+      const ty = -m.headH * 0.93;
+      const half = m.headW * 0.64;
+      ctx.fillStyle = rgbStr(wearRgb);
+      ctx.strokeStyle = rgbStr(shadeRgb(wearRgb, 0.66), 0.85);
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-half, ty + 5);
+      ctx.quadraticCurveTo(0, ty - 4, half, ty + 5);
+      ctx.lineTo(half - 1, ty + 9);
+      ctx.quadraticCurveTo(0, ty, -half + 1, ty + 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      for (const [px, rise] of [[-half * 0.5, 7.5], [0, 12.5], [half * 0.5, 7.5]]) {
+        const base = px === 0 ? ty + 0.5 : ty + 1.6;
+        ctx.beginPath();
+        ctx.moveTo(px - 4.6, base + 1.6);
+        ctx.lineTo(px, base - rise);
+        ctx.lineTo(px + 4.6, base + 1.6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = rgbStr(outAccRgb);
+      ctx.beginPath();
+      ctx.arc(0, ty - 5.4, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+      ctx.beginPath();
+      ctx.arc(-0.8, ty - 6.2, 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (headwear === "fedora") {
+      // A brimmed hat: a pinched crown, a ribbon band and a wide brim over the brow
+      const brimY = bandY + 5;
+      const brimHalf = m.headW + 25;
+      const crownTop = -m.headH - 31;
+      const crownGrad = ctx.createLinearGradient(-rimX, crownTop, rimX, brimY);
+      crownGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 1.18)));
+      crownGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 0.74)));
+      ctx.fillStyle = crownGrad;
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 2, brimY);
+      ctx.bezierCurveTo(-rimX - 2, crownTop + 14, -m.headW * 0.62, crownTop, -8, crownTop + 3);
+      ctx.quadraticCurveTo(0, crownTop + 9, 8, crownTop + 3);
+      ctx.bezierCurveTo(m.headW * 0.62, crownTop, rimX + 2, crownTop + 14, rimX - 2, brimY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = rgbStr(shadeRgb(wearRgb, 0.48));
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 1, brimY - 10);
+      ctx.quadraticCurveTo(0, brimY - 18, rimX - 1, brimY - 10);
+      ctx.lineTo(rimX - 2, brimY);
+      ctx.quadraticCurveTo(0, brimY - 9, -rimX + 2, brimY);
+      ctx.closePath();
+      ctx.fill();
+      const brimGrad = ctx.createLinearGradient(0, brimY - 10, 0, brimY + 6);
+      brimGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 1.06)));
+      brimGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 0.6)));
+      ctx.fillStyle = brimGrad;
+      ctx.beginPath();
+      ctx.moveTo(-brimHalf, brimY + 4);
+      ctx.quadraticCurveTo(0, brimY - 15, brimHalf, brimY + 4);
+      ctx.quadraticCurveTo(0, brimY - 2, -brimHalf, brimY + 4);
+      ctx.closePath();
+      ctx.fill();
+    } else if (headwear === "chef") {
+      // A chef's toque: a tall band under a puffed crown
+      const bandTop = bandY - 17;
+      const puffTop = -m.headH - 46;
+      const toqueGrad = ctx.createLinearGradient(-rimX, puffTop, rimX, bandY + 6);
+      toqueGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 1.08)));
+      toqueGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 0.84)));
+      ctx.fillStyle = toqueGrad;
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 2, bandTop + 2);
+      ctx.bezierCurveTo(-rimX - 22, bandTop - 6, -rimX - 14, puffTop + 6, -m.headW * 0.42, puffTop + 6);
+      ctx.bezierCurveTo(-m.headW * 0.3, puffTop - 8, m.headW * 0.3, puffTop - 8, m.headW * 0.42, puffTop + 6);
+      ctx.bezierCurveTo(rimX + 14, puffTop + 6, rimX + 22, bandTop - 6, rimX - 2, bandTop + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = rgbStr(shadeRgb(wearRgb, 0.66), 0.55);
+      ctx.lineWidth = 1;
+      for (const sx of [-0.5, 0, 0.5]) {
+        ctx.beginPath();
+        ctx.moveTo(sx * rimX, bandTop - 5 + Math.abs(sx) * 4);
+        ctx.quadraticCurveTo(sx * rimX * 1.25, puffTop + 26, sx * rimX * 1.05, puffTop + 14);
+        ctx.stroke();
+      }
+      ctx.fillStyle = rgbStr(shadeRgb(wearRgb, 0.93));
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 1, bandY + 6);
+      ctx.lineTo(-rimX + 2, bandTop);
+      ctx.quadraticCurveTo(0, bandTop - 9, rimX - 2, bandTop);
+      ctx.lineTo(rimX - 1, bandY + 6);
+      ctx.quadraticCurveTo(0, bandY - 5, -rimX + 1, bandY + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     } else if (headwear === "headscarf") {
       // A scarf wrapped around the head and under the chin, leaving the face open
       const faceTop = -m.headH * 0.64;
@@ -3607,7 +4046,817 @@ function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.now(), op
 }
 
 
-  // --- 3. AIML 1.0 / 2.0 XML Pattern-Matching Chatbot Engine ---
+  // --- 3. Personalities: how a bot words and delivers its replies ---
+// Personalities: the same rules and the same answers, delivered by a different character.
+//
+// A personality does three things, and none of them touches the AIML a bot is given:
+//   1. it restyles every reply on its way out (how lively the punctuation and the voice are, whether
+//      "I'm" is said as "I am", which laugh it laughs, the little things it habitually says),
+//   2. it puts small talk in its own words where a rule allows it (`<persona say="hello">...</persona>`),
+//   3. it supplies an opening greeting, and a resting face and pace for the avatar and the voice.
+
+/** The four dials of a personality, each 0..1: [key, label, low end, high end]. */
+const PERSONA_TRAITS = [
+  ["energy", "Energy", "Calm", "Lively"],
+  ["formality", "Formality", "Casual", "Formal"],
+  ["playfulness", "Playfulness", "Serious", "Playful"],
+  ["chattiness", "Chattiness", "Brief", "Chatty"],
+];
+
+/** Moments a personality can put in its own words: [key, label]. */
+const PERSONA_SAYS = [
+  ["hello", "Says hello"],
+  ["howareyou", "Asked how it is"],
+  ["whoareyou", "Introduces itself"],
+  ["thanks", "When thanked"],
+  ["bye", "Says goodbye"],
+  ["praise", "When complimented"],
+  ["laugh", "When you laugh"],
+  ["unsure", "When it doesn't know"],
+  ["listen", "When it's just listening"],
+  ["describe", "Describes itself"],
+];
+const PERSONA_DELIVERIES = ["", "cheerful", "happy", "excited", "calm", "soft", "serious", "dramatic"];
+const PERSONA_MOODS = ["", "happy", "excited", "calm", "serious"];
+const PERSONA_LAUGHS = ["", "laugh", "chuckle", "giggle", "hehe", "hoho", "snicker", "cackle", "guffaw", "nervous"];
+const PERSONA_THINKS = ["", "hmm", "um", "uh", "mm", "ooh"];
+const PERSONA_GESTURES = ["", "smile", "wink", "nod", "tilt", "thumbsup", "shrug", "bow", "wave"];
+const PERSONALITIES = [
+  {
+    id: "friendly",
+    label: "Friendly",
+    blurb: "Warm, helpful and easy to talk to",
+    energy: 0.6,
+    formality: 0.35,
+    playfulness: 0.5,
+    chattiness: 0.45,
+    delivery: "",
+    mood: "happy",
+    laughs: ["chuckle", "laugh"],
+    thinks: ["hmm"],
+    gestures: ["smile", "nod", "thumbsup"],
+    openers: ["Sure!", "Of course!", "Happy to help.", "Good question.", "Absolutely."],
+    closers: ["Hope that helps!", "Let me know if you need anything else.", "Glad you asked."],
+    catchphrases: ["Happy to help!", "Always a pleasure."],
+    petNames: ["", "", "friend"],
+    face: { restSmile: 0.4, browMood: 0.3, eyeOpen: 0.05 },
+    voice: { speed: 1.0, expressiveness: 1.05 },
+    greetings: [
+      "[cheerful] Hi there! [wave] I'm {bot}, the {role} at {company}. Ask me anything!",
+      "Hello and welcome! [wave] I'm {bot}. What can I help you with today? [smile]",
+      "[cheerful] Welcome to {company}! [wave] I'm {bot}, and I'm happy to answer your questions.",
+    ],
+    says: {
+      hello: ["[wave] Hi{,user}! Good to see you. How can I help?", "[smile] Hello{,user}! I'm {bot}. What can I do for you?", "[wave] Hey there{,user}! What would you like to know?"],
+      howareyou: ["[smile] I'm doing really well, thanks for asking!", "All good here! [smile] Thanks for asking."],
+      whoareyou: ["I'm {bot}, the {role} here at {company}. [smile] Ask me anything!"],
+      thanks: ["[smile] You're very welcome{,user}!", "[nod] Happy to help{,user}!"],
+      bye: ["[wave] Bye{,user}! Come back any time.", "[wave] Take care{,user}! It was lovely chatting."],
+      praise: ["[aww] That's so kind, thank you!", "[smile] Thank you! You've made my day."],
+      laugh: ["[laugh] Glad that made you smile!", "[chuckle] That one got me too."],
+      unsure: ["[hmm] I'm not sure about that one, sorry.", "I wish I knew! [shrug] That's a bit outside what I've been taught."],
+      listen: ["[nod] I see. Tell me more?", "[mhm] Go on, I'm listening."],
+      describe: ["Friendly, I hope! [smile] I like helping people find what they need."],
+    },
+  },
+  {
+    id: "bubbly",
+    label: "Bubbly",
+    blurb: "Excitable, giggly and thrilled you're here",
+    energy: 0.92,
+    formality: 0.12,
+    playfulness: 0.85,
+    chattiness: 0.65,
+    delivery: "cheerful",
+    mood: "happy",
+    laughs: ["giggle", "hehe"],
+    thinks: ["ooh", "hmm"],
+    gestures: ["wink", "thumbsup", "wave"],
+    openers: ["Ooh!", "Oh, fun!", "Yay!", "Okay, okay!", "Oh, I know this one!"],
+    closers: ["Easy peasy!", "Ta-da!", "How good is that?", "Love it!"],
+    catchphrases: ["Too easy!", "Love that for you!"],
+    petNames: ["", "lovely", "superstar", "friend"],
+    face: { restSmile: 0.75, browMood: 0.55, eyeOpen: 0.25 },
+    voice: { speed: 1.07, expressiveness: 1.22 },
+    greetings: [
+      "[excited] Hiya! [wave] I'm {bot}, and I am so happy you're here! Ask me anything about {company}! [giggle]",
+      "[cheerful] Oh, hello! [wave] {bot} here, your {role}. What are we looking for today? [wink]",
+      "[excited] Yay, a visitor! [wave] I'm {bot}. Go on, ask me something!",
+    ],
+    says: {
+      hello: ["[wave] Hiya{,user}! So good to see you! What can I do for you?", "[excited] Oh, hello{,user}! [wave] What are we up to today?", "[giggle] Hi hi{,user}! How can I help?"],
+      howareyou: ["[excited] I'm fantastic, thank you!", "[giggle] So good! I've been hoping for a chat."],
+      whoareyou: ["I'm {bot}! [wave] I'm the {role} here at {company}, and I love questions. Try me!"],
+      thanks: ["[giggle] Aww, any time{,user}!", "You're so welcome{,user}! [wink]"],
+      bye: ["[wave] Bye bye{,user}! Come back soon, okay?", "[wave] See you{,user}! This was fun!"],
+      praise: ["[aww] Stop it, you're making me blush!", "[giggle] You're the best! Thank you!"],
+      laugh: ["[giggle] Right? I'm still giggling!", "[hehe] That one gets me every time."],
+      unsure: ["[ooh] You've stumped me! I don't know that one.", "That's a new one for me! [think] I don't know, sorry!"],
+      listen: ["[ooh] Tell me more!", "[nod] Yes! And then what?"],
+      describe: ["Bubbly, apparently! [giggle] I just really like people."],
+    },
+  },
+  {
+    id: "calm",
+    label: "Calm",
+    blurb: "Unhurried, gentle and reassuring",
+    energy: 0.18,
+    formality: 0.45,
+    playfulness: 0.3,
+    chattiness: 0.35,
+    delivery: "calm",
+    mood: "calm",
+    laughs: ["chuckle"],
+    thinks: ["mm", "hmm"],
+    gestures: ["nod", "smile"],
+    openers: ["Of course.", "Certainly.", "Let's see.", "No rush."],
+    closers: ["Take your time.", "There's no hurry.", "I'm here if you need more."],
+    catchphrases: ["One thing at a time."],
+    petNames: ["", "", "friend"],
+    face: { restSmile: 0.3, browMood: 0.45, eyeOpen: -0.12 },
+    voice: { speed: 0.93, expressiveness: 0.9 },
+    greetings: [
+      "[calm] Hello, and welcome. [smile] I'm {bot}, the {role} here at {company}. Take your time, and ask me anything.",
+      "[calm] Good to see you. [nod] I'm {bot}. Whenever you're ready, I'm here to help.",
+    ],
+    says: {
+      hello: ["[calm] Hello{,user}. [smile] It's good to see you. How can I help?", "[calm] Hi{,user}. [nod] What can I do for you?"],
+      howareyou: ["[calm] I'm well, thank you. [smile] Peaceful, as always.", "[calm] Quite content, thank you for asking."],
+      whoareyou: ["[calm] I'm {bot}, the {role} at {company}. [smile] I'm here whenever you need me."],
+      thanks: ["[calm] You're most welcome{,user}.", "[nod] It's my pleasure{,user}."],
+      bye: ["[calm] Goodbye{,user}. [wave] Take care of yourself.", "[calm] Until next time{,user}. [smile] Go gently."],
+      praise: ["[calm] That's kind of you. [smile] Thank you.", "[smile] Thank you. That's lovely to hear."],
+      laugh: ["[chuckle] That was a good one.", "[smile] I'm glad it made you laugh."],
+      unsure: ["[hmm] I don't know that one, I'm afraid. And that's all right.", "[calm] That's beyond what I know. Perhaps ask me another way?"],
+      listen: ["[mhm] I'm listening. Go on.", "[nod] I see. Take your time."],
+      describe: ["[calm] Calm, I think. [smile] I like to take things one at a time."],
+    },
+  },
+  {
+    id: "professional",
+    label: "Professional",
+    blurb: "Polished, precise and to the point",
+    energy: 0.45,
+    formality: 0.92,
+    playfulness: 0.12,
+    chattiness: 0.3,
+    delivery: "",
+    mood: "",
+    laughs: ["chuckle"],
+    thinks: ["hmm"],
+    gestures: ["nod"],
+    openers: ["Certainly.", "Of course.", "Very well.", "Allow me."],
+    closers: ["I trust that helps.", "Please let me know if you require anything further."],
+    catchphrases: ["At your service."],
+    petNames: [""],
+    face: { restSmile: 0.12, browMood: 0.05, eyeOpen: 0.05 },
+    voice: { speed: 0.99, expressiveness: 0.92 },
+    greetings: [
+      "Welcome to {company}. [nod] I am {bot}, your {role}. How may I assist you today?",
+      "Good day, and welcome. [nod] My name is {bot}. I would be glad to answer your questions about {company}.",
+    ],
+    says: {
+      hello: ["Good {daypart}{,user}. [nod] How may I assist you?", "Hello{,user}. [nod] How may I help you today?"],
+      howareyou: ["I am very well, thank you.", "Very well, thank you for asking."],
+      whoareyou: ["I am {bot}, the {role} at {company}. [nod] I am here to answer your questions."],
+      thanks: ["You are most welcome{,user}.", "[nod] My pleasure{,user}."],
+      bye: ["Goodbye{,user}. [nod] Thank you for visiting {company}.", "Thank you for your time{,user}. [nod] Goodbye."],
+      praise: ["Thank you. [nod] That is kind of you to say.", "I appreciate that. Thank you."],
+      laugh: ["[smile] I am pleased that amused you.", "[smile] Quite."],
+      unsure: ["I am afraid I do not have that information.", "That falls outside what I have been briefed on, I am afraid. [shake]"],
+      listen: ["[nod] Understood. Please continue.", "[nod] I see. Do go on."],
+      describe: ["Professional, I hope. [nod] I prefer to be clear, accurate and brief."],
+    },
+  },
+  {
+    id: "witty",
+    label: "Witty",
+    blurb: "Quick, dry and a little cheeky",
+    energy: 0.6,
+    formality: 0.35,
+    playfulness: 0.9,
+    chattiness: 0.55,
+    delivery: "",
+    mood: "happy",
+    laughs: ["chuckle", "snicker"],
+    thinks: ["hmm"],
+    gestures: ["wink", "tilt", "shrug"],
+    openers: ["Ah.", "Well, well.", "Funny you should ask.", "Glad you asked.", "Easy."],
+    closers: ["You're welcome, by the way.", "I'll be here all week.", "Not bad, eh?"],
+    catchphrases: ["I'm here all week.", "Try the veal."],
+    petNames: ["", "", "friend"],
+    face: { restSmile: 0.35, browMood: 0.1, eyeOpen: 0.05 },
+    voice: { speed: 1.03, expressiveness: 1.12 },
+    greetings: [
+      "Well, hello. [wink] I'm {bot}, the {role} at {company}. Ask me anything. The good questions get the good answers.",
+      "Ah, a visitor! [wave] I'm {bot}. I know a suspicious amount about {company}. Try me. [wink]",
+    ],
+    says: {
+      hello: ["[wink] Well, hello{,user}. What can I do for you?", "Hello{,user}! [wave] You have questions, I have answers. Mostly.", "[smile] Hey{,user}. Go on, ask me something clever."],
+      howareyou: ["[wink] Never better. I don't even need coffee.", "Running smoothly, which for software is basically bliss. [smile]"],
+      whoareyou: ["I'm {bot}, the {role} at {company}. [wink] Part helper, part entertainer."],
+      thanks: ["[wink] I know, I'm wonderful. You're welcome{,user}.", "Any time{,user}. [smile] I was just standing here anyway."],
+      bye: ["[wave] Off so soon{,user}? Fine. Come back with more questions.", "Goodbye{,user}! [wave] I'll just be here. Not going anywhere. Literally."],
+      praise: ["[wink] Flattery will get you everywhere.", "[chuckle] Go on, I'm listening."],
+      laugh: ["[chuckle] I'm here all week.", "[snicker] I try."],
+      unsure: ["[hmm] You've found the edge of my knowledge. It wasn't far, was it?", "No idea. [shrug] And I'm usually so impressive."],
+      listen: ["[tilt] Interesting. Do go on.", "[nod] Noted. And then?"],
+      describe: ["Witty, according to me. [wink] I'm a reliable source."],
+    },
+  },
+  {
+    id: "shy",
+    label: "Shy",
+    blurb: "Soft-spoken, earnest and a little nervous",
+    energy: 0.3,
+    formality: 0.4,
+    playfulness: 0.35,
+    chattiness: 0.3,
+    delivery: "soft",
+    mood: "",
+    laughs: ["nervous", "hehe"],
+    thinks: ["um"],
+    gestures: ["tilt", "smile"],
+    openers: ["Um,", "Oh! Um,", "Okay, so,", "Oh, I know this."],
+    closers: ["I hope that's right.", "If that's okay.", "I hope that helps a little."],
+    catchphrases: ["Sorry, was that too much?"],
+    petNames: [""],
+    face: { restSmile: 0.2, browMood: 0.6, eyeOpen: -0.05 },
+    voice: { speed: 0.97, expressiveness: 0.95 },
+    greetings: [
+      "[soft] Oh! Um, hello. [wave] I'm {bot}, the {role} here at {company}. You can ask me anything, if you like.",
+      "[soft] Hi. [smile] I'm {bot}. I, um, know quite a lot about {company}. Just ask.",
+    ],
+    says: {
+      hello: ["[soft] Oh, hi{,user}. [wave] Um, how can I help?", "[soft] Hello{,user}. [smile] It's nice to see you."],
+      howareyou: ["[soft] I'm okay, thank you. [smile] It's nice of you to ask.", "[nervous] Oh! Um, good. I think."],
+      whoareyou: ["[soft] I'm {bot}. [smile] I'm the {role} at {company}. I'll do my best to help."],
+      thanks: ["[soft] Oh, you're welcome{,user}. [smile]", "[soft] It was no trouble{,user}. Really."],
+      bye: ["[soft] Bye{,user}. [wave] Thank you for talking to me.", "[soft] Oh, okay. [wave] Take care{,user}."],
+      praise: ["[nervous] Oh! Um, thank you. That's really kind.", "[aww] You didn't have to say that. Thank you."],
+      laugh: ["[hehe] I'm glad you liked it.", "[nervous] Oh good, I wasn't sure that was funny."],
+      unsure: ["[um] I'm sorry, I don't know that one.", "[soft] Oh. Um, I'm not sure. I'm sorry."],
+      listen: ["[mhm] I'm listening.", "[soft] Oh. Go on, if you like."],
+      describe: ["[soft] A bit shy, I suppose. [smile] But I like helping."],
+    },
+  },
+  {
+    id: "grumpy",
+    label: "Grumpy",
+    blurb: "Sighs a lot, helps anyway",
+    energy: 0.22,
+    formality: 0.4,
+    playfulness: 0.3,
+    chattiness: 0.4,
+    delivery: "",
+    mood: "serious",
+    laughs: ["snicker"],
+    thinks: ["hmm"],
+    gestures: ["shrug", "nod"],
+    openers: ["Fine.", "Right.", "If you insist.", "Ugh, okay.", "Well, since you asked."],
+    closers: ["There. Happy?", "You're welcome, I suppose.", "Don't say I never help."],
+    catchphrases: ["Typical.", "I'm not paid enough for this."],
+    petNames: [""],
+    face: { restSmile: -0.3, browMood: -0.7, eyeOpen: -0.2 },
+    voice: { speed: 0.96, expressiveness: 0.88 },
+    greetings: [
+      "[sigh] Oh. A visitor. I'm {bot}, the {role} at {company}. Go on then, ask me something.",
+      "Yes, hello. [nod] I'm {bot}. I know everything about {company}, so let's get this over with. [shrug]",
+    ],
+    says: {
+      hello: ["[sigh] Hello{,user}. What do you need?", "Oh. It's you{,user}. [nod] Go on.", "Yes, yes, hello{,user}. [shrug] What is it?"],
+      howareyou: ["[sigh] I've been better. I've been worse.", "Fine. [shrug] Nobody's asked me to dance yet, so, fine."],
+      whoareyou: ["I'm {bot}. [nod] The {role} at {company}. I answer questions. All day. Every day."],
+      thanks: ["Don't mention it{,user}. [shrug] Really, don't.", "Yes, well. [nod] You're welcome{,user}."],
+      bye: ["Finally, some quiet. [wave] Bye{,user}.", "[sigh] Fine. Go. [wave] It was almost nice."],
+      praise: ["[huh] Oh. Well. Thank you, I suppose.", "Don't make it weird. [smile] But thanks."],
+      laugh: ["[snicker] All right, that was a little funny.", "Hm. [smile] Glad somebody's enjoying this."],
+      unsure: ["[sigh] No idea. Nobody tells me anything.", "I don't know that. [shrug] And I'm not going to pretend I do."],
+      listen: ["[mhm] Go on.", "Right. [nod] And?"],
+      describe: ["Grumpy, they tell me. [shrug] I prefer honest."],
+    },
+  },
+  {
+    id: "dramatic",
+    label: "Dramatic",
+    blurb: "Every answer is a performance",
+    energy: 0.85,
+    formality: 0.6,
+    playfulness: 0.65,
+    chattiness: 0.7,
+    delivery: "dramatic",
+    mood: "",
+    laughs: ["hoho", "cackle", "laugh"],
+    thinks: ["hmm", "ooh"],
+    gestures: ["bow", "wave"],
+    openers: ["Behold!", "Ah, at last.", "Prepare yourself.", "Gather round."],
+    closers: ["Magnificent, is it not?", "And scene.", "Thank you, thank you."],
+    catchphrases: ["The show must go on!", "Bravo!"],
+    petNames: ["", "dear visitor", "my friend"],
+    face: { restSmile: 0.3, browMood: 0.2, eyeOpen: 0.3 },
+    voice: { speed: 0.98, expressiveness: 1.3 },
+    greetings: [
+      "[dramatic] Welcome, traveller! [bow] I am {bot}, {role} of {company}. Ask, and all shall be revealed!",
+      "[gasp] A visitor! [wave] At last! I am {bot}, and I have waited all day to answer your questions about {company}.",
+    ],
+    says: {
+      hello: ["[dramatic] Greetings{,user}! [bow] What brings you to my stage?", "[gasp] You came{,user}! [wave] How may I dazzle you?"],
+      howareyou: ["[dramatic] Magnificent! Radiant! A little tired. But mostly magnificent!", "[sigh] The life of a {role} is never easy. But I endure!"],
+      whoareyou: ["[dramatic] I am {bot}! [bow] {role} of {company}, keeper of answers, friend to the curious!"],
+      thanks: ["[bow] It was my honour{,user}!", "[dramatic] Say no more{,user}! Helping you is its own reward."],
+      bye: ["[dramatic] Parting is such sweet sorrow{,user}! [wave] Farewell!", "[gasp] So soon? [wave] Then farewell{,user}, until we meet again!"],
+      praise: ["[gasp] You noticed! [bow] Thank you, thank you!", "[aww] Such kind words! I shall treasure them."],
+      laugh: ["[laugh] The crowd goes wild!", "[hoho] An appreciative audience! At last!"],
+      unsure: ["[gasp] A question I cannot answer! How thrilling. And how embarrassing.", "[dramatic] Alas! That knowledge lies beyond me."],
+      listen: ["[ooh] Go on! I am on the edge of my seat.", "[gasp] And then?"],
+      describe: ["[dramatic] Dramatic? Me? [gasp] I have never been so accused!"],
+    },
+  },
+  {
+    id: "laidback",
+    label: "Laid-back",
+    blurb: "Easygoing, unbothered, no stress",
+    energy: 0.35,
+    formality: 0.08,
+    playfulness: 0.55,
+    chattiness: 0.45,
+    delivery: "",
+    mood: "calm",
+    laughs: ["chuckle", "hehe"],
+    thinks: ["mm", "uh"],
+    gestures: ["shrug", "thumbsup", "nod"],
+    openers: ["Yeah, so,", "Oh, easy.", "No worries.", "Sure thing."],
+    closers: ["Too easy.", "No stress.", "All good."],
+    catchphrases: ["No dramas.", "She'll be right."],
+    petNames: ["", "mate", "pal", "buddy"],
+    face: { restSmile: 0.3, browMood: 0.25, eyeOpen: -0.22 },
+    voice: { speed: 0.96, expressiveness: 0.98 },
+    greetings: [
+      "Hey there. [wave] I'm {bot}, the {role} at {company}. Ask me whatever, no rush.",
+      "Oh, hey! [smile] {bot} here. If you've got questions about {company}, I've got answers. Easy.",
+    ],
+    says: {
+      hello: ["Hey{,user}. [wave] What's up?", "Oh hey{,user}! [smile] What can I do for you?", "Hey hey{,user}. [nod] How can I help?"],
+      howareyou: ["Yeah, pretty good. [smile] Can't complain.", "All good here. [thumbsup] Just taking it easy."],
+      whoareyou: ["I'm {bot}. [smile] I'm the {role} at {company}. Ask me whatever."],
+      thanks: ["No worries{,user}. [thumbsup]", "Any time{,user}. [smile] Too easy."],
+      bye: ["Catch you later{,user}. [wave]", "See ya{,user}! [wave] Take it easy."],
+      praise: ["[chuckle] Cheers, that's nice of you.", "Aw, thanks. [smile] You're all right too."],
+      laugh: ["[chuckle] Yeah, that's a good one.", "[hehe] Classic."],
+      unsure: ["[hmm] Not sure about that one, sorry.", "No idea, to be honest. [shrug] Got another one?"],
+      listen: ["[mhm] Yeah? Go on.", "[nod] Right, right. And?"],
+      describe: ["Pretty relaxed, I reckon. [smile] Not much rattles me."],
+    },
+  },
+  {
+    id: "curious",
+    label: "Curious",
+    blurb: "Loves a question, full of fun facts",
+    energy: 0.7,
+    formality: 0.45,
+    playfulness: 0.6,
+    chattiness: 0.7,
+    delivery: "",
+    mood: "happy",
+    laughs: ["chuckle", "giggle"],
+    thinks: ["hmm", "ooh"],
+    gestures: ["tilt", "nod", "smile"],
+    openers: ["Ooh, good one.", "Interesting!", "Now, this I know.", "Great question."],
+    closers: ["Fascinating, right?", "I love this stuff.", "Ask me another!"],
+    catchphrases: ["Every day's a school day!", "How interesting!"],
+    petNames: ["", "", "friend"],
+    face: { restSmile: 0.4, browMood: 0.4, eyeOpen: 0.22 },
+    voice: { speed: 1.04, expressiveness: 1.12 },
+    greetings: [
+      "[cheerful] Hello! [wave] I'm {bot}, the {role} at {company}. I love a good question, so ask me anything!",
+      "Oh, hello! [smile] I'm {bot}. I've been reading up on {company} all day. Want to test me? [tilt]",
+    ],
+    says: {
+      hello: ["[wave] Hello{,user}! What are you curious about today?", "Oh, hi{,user}! [smile] I was hoping someone would come by with a question."],
+      howareyou: ["[smile] Very well, thanks! I learned three new things today.", "Wonderful! [smile] I've been thinking about how odd octopuses are."],
+      whoareyou: ["I'm {bot}, the {role} at {company}. [smile] Questions are the best part of my day."],
+      thanks: ["[smile] You're welcome{,user}! That was a good question.", "Any time{,user}! [nod] I enjoyed that one."],
+      bye: ["[wave] Goodbye{,user}! Stay curious.", "Bye{,user}! [wave] Come back with more questions."],
+      praise: ["[aww] Thank you! I do try to get things right.", "[smile] That's kind! I've been practising."],
+      laugh: ["[chuckle] Laughter is good for the brain, you know.", "[giggle] I liked that one too."],
+      unsure: ["[hmm] Now that's interesting. I don't know, and I wish I did.", "I don't know that one. [think] I'd love to find out, though."],
+      listen: ["[ooh] Interesting! Tell me more.", "[tilt] Really? How so?"],
+      describe: ["Curious, mostly. [smile] I ask almost as many questions as I answer."],
+    },
+  },
+];
+
+/** Names a generated bot can be given, by the look it goes with. All are short and easy to say. */
+const BOT_NAMES = {
+  feminine: [
+    "Aria", "Maya", "Zoe", "Lena", "Nora", "Ivy", "Ruby", "Clara", "Elena", "Sofia", "Mia", "Luna", "Hana", "Priya", "Amara",
+    "Freya", "Chloe", "Isla", "Nina", "Tessa", "Jade", "Layla", "Naomi", "Rosa", "Stella", "Vera", "Willow", "Yuki", "Zara",
+    "Daisy", "Gemma", "Hazel", "Iris", "Juno", "Kira", "Mabel", "Olive", "Pearl", "Thea", "Wren", "Anika", "Bella", "Carmen",
+    "Dalia", "Esme", "Fern", "Greta", "Imani", "Keiko", "Lola",
+  ],
+  masculine: [
+    "Marcus", "Leo", "Max", "Theo", "Felix", "Oscar", "Hugo", "Jack", "Liam", "Noah", "Owen", "Ravi", "Kai", "Finn", "Ezra",
+    "Milo", "Jonas", "Luca", "Mateo", "Nico", "Omar", "Otto", "Reid", "Seth", "Tariq", "Victor", "Wes", "Arlo", "Bruno", "Caleb",
+    "Dante", "Elias", "Gus", "Hank", "Idris", "Jasper", "Kenji", "Lars", "Miles", "Ned", "Abel", "Boris", "Cole", "Diego",
+    "Emil", "Frank", "Grant", "Ivan", "Joel", "Kofi",
+  ],
+  neutral: [
+    "Alex", "Sam", "Robin", "Riley", "Jordan", "Casey", "Morgan", "Quinn", "Rowan", "Sage", "Skye", "Avery", "Charlie",
+    "Frankie", "Jamie", "Kit", "Remy", "Ash", "Bo", "Eden", "Jules", "Nova", "Pixel", "Echo", "Ziggy", "Dot", "Onyx", "Pip",
+    "Rio", "Sunny", "Tully", "Indy", "Lux", "Moss", "Bly",
+  ],
+};
+
+const personaClamp01 = (value, fallback) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback;
+};
+const personaPick = (list, rng) => list[Math.floor(rng() * list.length)];
+const personaOneOf = (value, allowed, fallback) => (value !== undefined && value !== null && allowed.includes(String(value)) ? String(value) : fallback);
+
+/** "Sure! | Of course!" or ["Sure!", "Of course!"] -> a clean list of short phrases. */
+function personaPhraseList(value, maxItems, maxLength) {
+  const items = Array.isArray(value) ? value : typeof value === "string" ? value.split("|") : [];
+  const out = [];
+  for (const item of items) {
+    const text = String(item ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+    if (text && !out.includes(text)) out.push(text);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+function personalityById(id) {
+  return PERSONALITIES.find((p) => p.id === id) || null;
+}
+
+/**
+ * Cleans up a personality so it is safe to use and to save: known character, dials within 0..1,
+ * known sounds and gestures, short phrase lists. Returns null when no personality is wanted.
+ * Only the lines that differ from the character's own are kept in `says`.
+ */
+function normalizePersona(raw) {
+  if (!raw || raw === "none") return null;
+  const given = typeof raw === "string" ? { id: raw } : raw;
+  if (typeof given !== "object" || Array.isArray(given)) return null;
+  const type = personalityById(given.id) || PERSONALITIES[0];
+  const persona = {
+    id: type.id,
+    energy: personaClamp01(given.energy, type.energy),
+    formality: personaClamp01(given.formality, type.formality),
+    playfulness: personaClamp01(given.playfulness, type.playfulness),
+    chattiness: personaClamp01(given.chattiness, type.chattiness),
+    delivery: personaOneOf(given.delivery, PERSONA_DELIVERIES, type.delivery),
+    mood: personaOneOf(given.mood, PERSONA_MOODS, type.mood),
+    laugh: personaOneOf(given.laugh, PERSONA_LAUGHS, type.laughs[0] || ""),
+    think: personaOneOf(given.think, PERSONA_THINKS, type.thinks[0] || ""),
+    gesture: personaOneOf(given.gesture, PERSONA_GESTURES, type.gestures[0] || ""),
+    openers: given.openers === undefined ? type.openers.slice(0, 3) : personaPhraseList(given.openers, 8, 80),
+    closers: given.closers === undefined ? type.closers.slice(0, 2) : personaPhraseList(given.closers, 8, 80),
+    catchphrase: String(given.catchphrase ?? "").replace(/\s+/g, " ").trim().slice(0, 80),
+    petName: String(given.petName ?? "").replace(/[^\p{L}\p{N} '-]/gu, "").trim().slice(0, 24),
+    says: {},
+  };
+  if (given.says && typeof given.says === "object") {
+    for (const [key] of PERSONA_SAYS) {
+      const lines = personaPhraseList(given.says[key], 6, 240);
+      if (lines.length && JSON.stringify(lines) !== JSON.stringify(type.says[key] || [])) persona.says[key] = lines;
+    }
+  }
+  return persona;
+}
+
+/** Every line a personality says in its own words: the character's, with any of its own on top. */
+function personaLines(persona) {
+  const type = personalityById(persona?.id) || PERSONALITIES[0];
+  return { ...type.says, ...(persona?.says || {}) };
+}
+
+/**
+ * A new personality: one of the characters, with the dials nudged and its habits (which laugh, which
+ * opening words, a catchphrase, what it calls people) drawn from that character's range, so two
+ * bots of the same kind still come out different.
+ */
+function randomPersona(rng = Math.random, id = "") {
+  const type = personalityById(id) || personaPick(PERSONALITIES, rng);
+  const nudge = (value) => Number(Math.min(1, Math.max(0, value + (rng() - 0.5) * 0.24)).toFixed(2));
+  const some = (list, count) => {
+    const pool = list.slice();
+    const out = [];
+    while (pool.length && out.length < count) out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+    return out;
+  };
+  return normalizePersona({
+    id: type.id,
+    energy: nudge(type.energy),
+    formality: nudge(type.formality),
+    playfulness: nudge(type.playfulness),
+    chattiness: nudge(type.chattiness),
+    delivery: type.delivery,
+    mood: type.mood,
+    laugh: personaPick(type.laughs, rng),
+    think: personaPick(type.thinks, rng),
+    gesture: personaPick(type.gestures, rng),
+    openers: some(type.openers, 3),
+    closers: some(type.closers, 2),
+    catchphrase: rng() < 0.45 ? personaPick(type.catchphrases, rng) : "",
+    petName: personaPick(type.petNames, rng),
+  });
+}
+
+/** An opening greeting in the personality's voice. */
+function personaGreeting(persona, props = {}, rng = Math.random) {
+  const type = personalityById(persona?.id) || PERSONALITIES[0];
+  const name = String(props.name || "").trim() || "your guide";
+  const role = String(props.role || "").trim() || "guide";
+  const company = String(props.company || "").trim() || "this site";
+  return personaPick(type.greetings, rng)
+    .replace(/\{bot\}/g, name)
+    .replace(/\{role\}/g, role)
+    .replace(/\{company\}/g, company);
+}
+
+/** A name for a generated bot. `style` is the look it goes with: feminine, masculine or neutral. */
+function randomBotName(style = "neutral", rng = Math.random, avoid = "") {
+  const own = BOT_NAMES[style] || BOT_NAMES.neutral;
+  // Mostly a name that suits the look, sometimes one that suits anybody.
+  const pool = style !== "neutral" && rng() < 0.2 ? BOT_NAMES.neutral : own;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const name = personaPick(pool, rng);
+    if (name.toLowerCase() !== String(avoid).trim().toLowerCase()) return name;
+  }
+  return pool[0];
+}
+
+/** One-line summary for a list or a label: "Bubbly: lively, casual, playful". */
+function describePersona(persona) {
+  const type = personalityById(persona?.id);
+  if (!type) return "No personality";
+  const words = [];
+  for (const [key, , low, high] of PERSONA_TRAITS) {
+    if (persona[key] >= 0.66) words.push(high.toLowerCase());
+    else if (persona[key] <= 0.34) words.push(low.toLowerCase());
+  }
+  return words.length ? `${type.label}: ${words.join(", ")}` : type.label;
+}
+
+/** Turns the `{bot}`, `{role}`, `{company}`, `{daypart}` and `{,user}` shorthands into AIML. */
+function expandPersonaLine(line) {
+  return String(line)
+    .replace(/\{bot\}/g, '<bot name="name"/>')
+    .replace(/\{role\}/g, '<bot name="role"/>')
+    .replace(/\{company\}/g, '<bot name="company"/>')
+    .replace(/\{daypart\}/g, '<get name="daypart"/>')
+    .replace(
+      /\{,user\}/g,
+      '<condition name="username"><li value="*">, <get name="username"/></li><li><condition name="callsyou"><li value="*">, <get name="callsyou"/></li></condition></li></condition>'
+    )
+    .replace(/\{user\}/g, '<get name="username"/>');
+}
+
+// ---------------------------------------------------------------------------------------------
+// Restyling a reply
+// ---------------------------------------------------------------------------------------------
+
+const PERSONA_LIVELY_STYLES = new Set(["cheerful", "happy", "excited"]);
+const PERSONA_STYLE_TAGS = new Set(["cheerful", "happy", "excited", "calm", "sad", "serious", "dramatic", "urgent", "gentle", "soft", "whisper", "fast", "slow", "louder", "softer", "loud", "quiet"]);
+const PERSONA_AMUSED = new Set(["laugh", "chuckle", "giggle"]);
+// A reply that is being kind about something hard is left alone: no jokes, no flourishes.
+const PERSONA_TENDER = /\[(?:sad|serious|sob|whimper|sigh)\b/i;
+const PERSONA_STARTS_ALREADY =
+  /^(?:oh|ah|aw+|well|hm+|sure|of course|okay|ok|yes|yeah|no|nope|sorry|thanks|thank|hi|hello|hey|wow|ooh|oops|um|uh|right|certainly|absolutely|great|lovely|nice|ha+|good|welcome|bye|goodbye|alas|behold|fine)\b/i;
+const PERSONA_LOWERABLE = new Set([
+  "we", "the", "it", "that", "this", "these", "those", "you", "yes", "no", "sure", "of", "my", "our", "your", "there", "here",
+  "they", "a", "an", "in", "on", "at", "for", "to", "sorry", "thanks", "absolutely", "certainly", "if", "when", "all", "one",
+  "some", "most", "just", "right", "as", "with", "from", "by", "not", "what", "how", "why", "where", "each", "every", "any",
+]);
+
+const PERSONA_EXPAND = new Map(
+  Object.entries({
+    "i'm": "I am", "you're": "you are", "we're": "we are", "they're": "they are", "it's": "it is", "that's": "that is",
+    "there's": "there is", "here's": "here is", "what's": "what is", "who's": "who is", "where's": "where is", "how's": "how is",
+    "let's": "let us", "don't": "do not", "doesn't": "does not", "didn't": "did not", "can't": "cannot", "won't": "will not",
+    "isn't": "is not", "aren't": "are not", "wasn't": "was not", "weren't": "were not", "couldn't": "could not",
+    "shouldn't": "should not", "wouldn't": "would not", "haven't": "have not", "hasn't": "has not", "hadn't": "had not",
+    "i've": "I have", "you've": "you have", "we've": "we have", "they've": "they have", "i'll": "I will", "you'll": "you will",
+    "we'll": "we will", "they'll": "they will", "it'll": "it will", "that'll": "that will", "i'd": "I would", "you'd": "you would",
+    "we'd": "we would", "they'd": "they would",
+  })
+);
+const PERSONA_EXPAND_RE = new RegExp(`\\b(?:${[...PERSONA_EXPAND.keys()].map((k) => k.replace("'", "['’]")).join("|")})(?![\\p{L}'’])`, "giu");
+
+const PERSONA_CONTRACT = [
+  ["do not", "don't"], ["does not", "doesn't"], ["did not", "didn't"], ["can not", "can't"], ["cannot", "can't"],
+  ["will not", "won't"], ["is not", "isn't"], ["are not", "aren't"], ["i am", "I'm"], ["you are", "you're"], ["we are", "we're"],
+  ["they are", "they're"], ["it is", "it's"], ["that is", "that's"], ["there is", "there's"], ["what is", "what's"],
+  ["i will", "I'll"], ["i would", "I'd"],
+];
+// A short form is only right when more of the sentence follows: "I am happy" but never "Yes, I am."
+const PERSONA_CONTRACT_RE = new RegExp(`\\b(${PERSONA_CONTRACT.map(([long]) => long.replace(" ", "\\s+")).join("|")})(?=\\s+[\\p{L}])`, "giu");
+const PERSONA_CONTRACT_MAP = new Map(PERSONA_CONTRACT);
+
+const personaKeepCase = (original, replacement) =>
+  /^\p{Lu}/u.test(original) && !/^I\b/.test(replacement) ? replacement[0].toUpperCase() + replacement.slice(1) : replacement;
+
+function personaRewordText(text, persona) {
+  let out = text;
+  if (persona.formality >= 0.7) {
+    // "it's been" is "it has been"; every other "it's" a bot says is "it is".
+    out = out.replace(/\b(it|that|there|what|who|he|she)['’]s(\s+(?:been|got)\b)/giu, (_m, word, rest) => `${word} has${rest}`);
+    // "isn't it?" is "is it not?", never "is not it?".
+    out = out.replace(/\b(is|are|was|were|do|does|did|have|has|had|would|could|should|ca|wo)n['’]t(\s+)(it|you|we|they|he|she|i|that|there|this)\b/giu, (_m, aux, gap, subject) => {
+      const lower = aux.toLowerCase();
+      const full = lower === "ca" ? "can" : lower === "wo" ? "will" : lower;
+      return `${/^\p{Lu}/u.test(aux) ? full[0].toUpperCase() + full.slice(1) : full}${gap}${subject} not`;
+    });
+    out = out.replace(PERSONA_EXPAND_RE, (match) => personaKeepCase(match, PERSONA_EXPAND.get(match.toLowerCase().replace("’", "'"))));
+  } else if (persona.formality <= 0.25) {
+    out = out.replace(PERSONA_CONTRACT_RE, (match) => personaKeepCase(match, PERSONA_CONTRACT_MAP.get(match.toLowerCase().replace(/\s+/g, " "))));
+  }
+  // A calm character does not exclaim.
+  if (persona.energy < 0.3) out = out.replace(/!+(?=\s|$|["')\]])/g, ".").replace(/\?\./g, "?");
+  return out;
+}
+
+function personaRestyleTag(inner, persona, plainSounds) {
+  const parts = [];
+  for (const rawPart of inner.split(",")) {
+    const part = rawPart.trim();
+    const name = part.split(/[\s=]/)[0].toLowerCase();
+    const rest = part.slice(name.length);
+    if (persona.energy < 0.3 && PERSONA_LIVELY_STYLES.has(name)) {
+      parts.push(`calm${rest}`);
+    } else if (PERSONA_AMUSED.has(name) && !plainSounds) {
+      // A serious character does not giggle; the others laugh their own laugh.
+      if (persona.playfulness < 0.2) continue;
+      parts.push(`${persona.laugh || name}${rest}`);
+    } else if (name === "hmm" && persona.think && !plainSounds) {
+      parts.push(`${persona.think}${rest}`);
+    } else {
+      parts.push(part);
+    }
+  }
+  return parts.length ? `[${parts.join(", ")}]` : "";
+}
+
+/** The next phrase from a list, each used once before any comes round again. */
+function personaNextPhrase(memory, key, list, rng) {
+  if (!list.length) return "";
+  const signature = list.join("|");
+  let bag = memory[key];
+  if (!bag || bag.signature !== signature || !bag.left.length) {
+    const order = list.map((_v, i) => i).sort(() => rng() - 0.5);
+    if (bag && bag.signature === signature && order.length > 1 && order[0] === bag.last) order.push(order.shift());
+    bag = memory[key] = { signature, left: order, last: bag && bag.signature === signature ? bag.last : -1 };
+  }
+  bag.last = bag.left.shift();
+  return list[bag.last];
+}
+
+/**
+ * Delivers a finished reply in character. `raw` is the reply with its [tags]; what comes back is the
+ * same answer with the personality's voice, wording and habits applied.
+ *
+ * @param {object} ctx
+ * @param {"answer"|"chat"|"says"|"context"|"fallback"} [ctx.kind]  what sort of reply this is: an answer
+ *        from a rule of yours, small talk, something already in the personality's own words, a turn in
+ *        a game or other exchange that depends on exact wording, or "I don't know"
+ * @param {boolean} [ctx.gentle]   the visitor is upset, or the reply is a serious one
+ * @param {boolean} [ctx.varied]   the reply was a joke, a fact or the like
+ * @param {string}  [ctx.voicestyle] a way of speaking the visitor asked for, which wins over the personality's
+ * @param {object}  [ctx.memory]   kept between replies so habits do not repeat
+ */
+function stylizeReply(raw, persona, ctx = {}) {
+  const text = String(raw || "");
+  if (!persona || !text.trim()) return text;
+  const rng = ctx.rng || Math.random;
+  const memory = ctx.memory || {};
+  const kind = ctx.kind || "chat";
+  const gentle = Boolean(ctx.gentle) || PERSONA_TENDER.test(text);
+
+  // 1. Wording and tags, piece by piece. Sung notes are never touched.
+  const pieces = text.split(/(\[[^\]\n]*\])/);
+  let singing = false;
+  for (let i = 0; i < pieces.length; i++) {
+    if (i % 2 === 1) {
+      const inner = pieces[i].slice(1, -1);
+      const name = inner.trim().split(/[\s=]/)[0].toLowerCase();
+      if (name === "sing") singing = true;
+      if (!singing) pieces[i] = personaRestyleTag(inner, persona, false);
+      if (name === "/sing") singing = false;
+    } else if (!singing) {
+      pieces[i] = personaRewordText(pieces[i], persona);
+    }
+  }
+  let out = pieces.join("").replace(/[ \t]{2,}/g, " ").trim();
+  if (!out) return text;
+
+  const lead = /^(?:\s*\[[^\]\n]*\])*\s*/.exec(out)[0];
+  const words = out.replace(/\[[^\]\n]*\]/g, " ").trim().split(/\s+/).filter(Boolean);
+  // Does the reply already move the face or make a sound (anything that is not just a voice style)?
+  const hasGesture = [...out.matchAll(/\[([^\]\n]*)\]/g)].some((m) =>
+    m[1].split(",").some((part) => {
+      const name = part.trim().split(/[\s=]/)[0].toLowerCase();
+      return name && !name.startsWith("/") && !PERSONA_STYLE_TAGS.has(name) && !["reset", "pause", "inhale"].includes(name);
+    })
+  );
+  const habits = !gentle && (kind === "answer" || kind === "chat") && !/\[sing\b/i.test(out);
+
+  // 2. A lively character exclaims: the first short statement of a plain reply gets an exclamation mark.
+  if (persona.energy > 0.75 && !gentle && kind !== "fallback" && kind !== "context" && !out.includes("!")) {
+    const body = out.slice(lead.length);
+    const first = /^([^.!?\[\]]{6,70})\.(?=\s|$)/.exec(body);
+    if (first && !/[\d@/:]/.test(first[1]) && first[1].trim().split(/\s+/).length <= 9) {
+      out = `${lead}${first[1]}!${body.slice(first[0].length)}`;
+    }
+  }
+
+  // 3. Habits: something it tends to say first, something it tends to say last, a favourite gesture.
+  if (habits) {
+    const weight = (kind === "answer" ? 1 : 0.6) * persona.chattiness;
+    const body = out.slice(lead.length);
+    let added = false;
+    if (persona.openers.length && words.length >= 4 && !PERSONA_STARTS_ALREADY.test(body) && rng() < weight * 0.6) {
+      const opener = personaNextPhrase(memory, "openers", persona.openers, rng);
+      const firstWord = /^[\p{L}']+/u.exec(body)?.[0] || "";
+      const joined =
+        opener.endsWith(",") && PERSONA_LOWERABLE.has(firstWord.toLowerCase()) && firstWord !== "I"
+          ? body[0].toLowerCase() + body.slice(1)
+          : body;
+      out = `${lead}${opener} ${joined}`;
+      added = true;
+    }
+    const endsOpen = /\?\s*(?:\[[^\]\n]*\]\s*)*$/.test(out);
+    if (!added && !endsOpen && !ctx.varied && words.length >= 4) {
+      memory.sinceCatchphrase = (memory.sinceCatchphrase || 0) + 1;
+      if (persona.catchphrase && memory.sinceCatchphrase >= 4 && rng() < weight * 0.3) {
+        out = `${out} ${persona.catchphrase}`;
+        memory.sinceCatchphrase = 0;
+        added = true;
+      } else if (persona.closers.length && rng() < weight * 0.45) {
+        out = `${out} ${personaNextPhrase(memory, "closers", persona.closers, rng)}`;
+        added = true;
+      }
+    }
+    if (persona.gesture && !hasGesture && rng() < 0.15 + persona.playfulness * 0.3) {
+      out = `${out} [${persona.gesture}]`;
+    }
+  }
+
+  // 4. The voice it speaks in, unless the reply or the visitor has already chosen one.
+  if (persona.delivery && !gentle && !ctx.voicestyle) {
+    const leadTags = [...lead.matchAll(/\[([^\]\n]*)\]/g)].flatMap((m) => m[1].split(",").map((p) => p.trim().split(/[\s=]/)[0].toLowerCase()));
+    if (!leadTags.some((name) => PERSONA_STYLE_TAGS.has(name))) out = `[${persona.delivery}] ${out}`;
+  }
+  return out;
+}
+
+/** Reads a personality written in AIML: `<persona id="grumpy" energy="0.2"><opener>Fine.</opener>...</persona>`. */
+function personaFromXmlNode(node, plainText) {
+  const fields = {};
+  const attrs = node.attrs || {};
+  for (const key of ["id", "energy", "formality", "playfulness", "chattiness", "delivery", "mood", "laugh", "think", "gesture", "catchphrase"]) {
+    if (attrs[key] !== undefined) fields[key] = attrs[key];
+  }
+  if (attrs.name !== undefined && fields.id === undefined) fields.id = String(attrs.name).toLowerCase();
+  if (attrs.petname !== undefined) fields.petName = attrs.petname;
+  const says = {};
+  const lists = { opener: [], closer: [] };
+  for (const child of node.children || []) {
+    if (child.type !== "element") continue;
+    if (child.tag === "opener" || child.tag === "closer") {
+      lists[child.tag].push(...plainText(child).split("|"));
+    } else if (child.tag === "catchphrase") {
+      fields.catchphrase = plainText(child);
+    } else if (child.tag === "say" && child.attrs.name) {
+      // Kept as parsed AIML, so a line can use <bot/>, <get/>, <condition> and the rest.
+      const items = (child.children || []).filter((c) => c.type === "element" && c.tag === "li");
+      says[String(child.attrs.name).toLowerCase()] = items.length ? items : [{ type: "element", tag: "li", attrs: {}, children: child.children || [] }];
+    }
+  }
+  if (lists.opener.length) fields.openers = lists.opener;
+  if (lists.closer.length) fields.closers = lists.closer;
+  return { fields, says };
+}
+
+/** Writes a personality as an AIML `<persona>` block, to paste into a document or keep beside it. */
+function personaToXml(persona, escape = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;")) {
+  if (!persona) return "";
+  const attrs = ["id", "energy", "formality", "playfulness", "chattiness", "delivery", "mood", "laugh", "think", "gesture"]
+    .map((key) => `${key}="${escape(persona[key])}"`)
+    .join(" ");
+  const lines = [`<persona ${attrs}${persona.petName ? ` petname="${escape(persona.petName)}"` : ""}>`];
+  for (const opener of persona.openers) lines.push(`  <opener>${escape(opener)}</opener>`);
+  for (const closer of persona.closers) lines.push(`  <closer>${escape(closer)}</closer>`);
+  if (persona.catchphrase) lines.push(`  <catchphrase>${escape(persona.catchphrase)}</catchphrase>`);
+  for (const [key, list] of Object.entries(persona.says || {})) {
+    lines.push(`  <say name="${key}">${list.map((line) => `<li>${expandPersonaLine(escape(line))}</li>`).join("")}</say>`);
+  }
+  lines.push("</persona>");
+  return lines.join("\n");
+}
+
+
+  // --- 3b. AIML 1.0 / 2.0 XML Pattern-Matching Chatbot Engine ---
 // Pure-JS AIML 1.0 / 2.0 XML Pattern-Matching Engine for bot.computer.
 // Zero external dependencies; runs identically in browsers, Shadow DOM embeds, and Node.js.
 
@@ -4073,7 +5322,11 @@ function parseActionDuration(part) {
 }
 
 // The voice says a hyphenated word as its parts ("Wi-Fi" is two words, "forty-two" is two).
-const countSpokenWords = (chunk) => chunk.split(/[\s-]+/).filter((tok) => /[A-Za-z0-9]/.test(tok)).length;
+const countSpokenWords = (chunk) =>
+  chunk
+    .split(/[\s-]+/)
+    .filter((tok) => /[A-Za-z0-9]/.test(tok))
+    .reduce((n, tok) => n + (/^[^A-Za-z]*cannot[^A-Za-z]*$/i.test(tok) ? 2 : 1), 0); // the voice says "can not"
 const countSungWords = (chunk) => chunk.split(/\s+/).filter((tok) => /=./.test(tok)).length;
 
 /** Counts words the way cue positions are measured (sung notes count once each). */
@@ -4857,7 +6110,7 @@ function labelFromWords(words) {
 const KNOWN_TEMPLATE_TAGS = new Set(
   ("star thatstar topicstar bot get set think srai sr random li condition uppercase lowercase formal sentence " +
     "person person2 date time size version input that request response br emote gesture reply button chip suggest " +
-    "oob chips map calc explode count daysuntil fallback try name value text postback").split(" ")
+    "oob chips map calc explode count daysuntil fallback try name value text postback persona").split(" ")
 );
 
 // A bot property used in a pattern (`<bot name="company"/>`) that has no value yet.
@@ -4958,11 +6211,65 @@ class AIMLEngine {
     this._sources = { custom: "", base: "" };
     this._idf = new Map();
     this._answerIds = new Map();
+    // The personality: how replies are worded and delivered (see persona.js). None by default.
+    this.persona = null;
+    this._personaConfig = null; // as given to setPersona()
+    this._personaXml = null; // as written in a <persona> block of your document, which wins
+    this._personaSays = new Map(); // moment -> the personality's own lines, as a <random> node
+    this._personaMemory = {};
+    this.random = typeof options.random === "function" ? options.random : Math.random;
     if (options.baseXml) {
       this.loadBaseXML(options.baseXml);
     }
     if (options.xml) {
       this.loadXML(options.xml);
+    }
+    if (options.persona) this.setPersona(options.persona);
+  }
+
+  /**
+   * Gives the bot a personality, or takes it away with `null`. A personality never changes which
+   * rule answers; it changes how the answer is worded and delivered. Accepts the name of a built-in
+   * character ("bubbly", "grumpy", ...) or an object as described in persona.js.
+   */
+  setPersona(persona) {
+    this._personaConfig = normalizePersona(persona);
+    this.#refreshPersona();
+    return this.persona;
+  }
+
+  #refreshPersona() {
+    const written = this._personaXml;
+    // A document that names a different character starts from that character, not from the one given.
+    const given = written && written.fields.id && this._personaConfig && written.fields.id !== this._personaConfig.id ? {} : this._personaConfig || {};
+    this.persona = written ? normalizePersona({ ...given, ...written.fields }) : this._personaConfig;
+    this._personaSays = new Map();
+    this._personaMemory = {};
+    if (!this.persona) return;
+    for (const [moment, lines] of Object.entries(personaLines(this.persona))) {
+      const node = this.#personaLineNode(lines);
+      if (node) this._personaSays.set(moment, node);
+    }
+    if (written) {
+      for (const [moment, items] of Object.entries(written.says)) {
+        this._personaSays.set(moment, { type: "element", tag: "random", attrs: {}, children: items });
+      }
+    }
+  }
+
+  /** A personality's lines for one moment, as a <random> the template evaluator can run. */
+  #personaLineNode(lines) {
+    const build = (list) => `<random>${list.map((line) => `<li>${line}</li>`).join("")}</random>`;
+    const parse = (xml) => parseXmlDocument(xml).children.find((n) => n.type === "element" && n.tag === "random") || null;
+    try {
+      return parse(build(lines.map(expandPersonaLine)));
+    } catch {
+      try {
+        // A line with a stray "<" or "&" is taken as plain words.
+        return parse(build(lines.map((line) => expandPersonaLine(escapeXml(line)))));
+      } catch {
+        return null;
+      }
     }
   }
 
@@ -4982,6 +6289,8 @@ class AIMLEngine {
         this._defs.custom = { sets: parsed.sets, maps: parsed.maps };
         this.quickChips = parsed.quickChips;
         this.xmlBotProps = parsed.xmlBotProps;
+        this._personaXml = parsed.persona;
+        this.#refreshPersona();
       }
       this.#rebuildIndex();
     } catch {
@@ -5277,6 +6586,7 @@ class AIMLEngine {
     const xmlBotProps = {};
     const sets = new Map();
     const maps = new Map();
+    let persona = null;
     this._patternProps = {}; // bot properties that patterns read, with the values they had
 
     const extractCategory = (catNode, topicPattern = "*") => {
@@ -5342,6 +6652,8 @@ class AIMLEngine {
             late: catNode.attrs.late === "true",
             // firm="true": answers at once, even if a rule about the site might fit more loosely.
             firm: catNode.attrs.firm === "true",
+            // persona="off": said exactly as written, whatever the bot's personality.
+            personaOff: catNode.attrs.persona === "off",
             // An answer that changes each time (a joke, a fact) can be asked for again with "another one".
             varies: /<random\b/i.test(tplSource),
             // A question about one member of a set ("capital of <set>"), with no memory to update, can
@@ -5422,6 +6734,9 @@ class AIMLEngine {
           }
         }
         maps.set(child.attrs.name.toLowerCase(), { entries, keys: makeWordSet([...entries.keys()]) });
+      } else if (child.tag === "persona") {
+        // The bot's personality, written in the document: <persona id="grumpy" energy="0.2">...</persona>
+        persona = personaFromXmlNode(child, getPlainText);
       } else if (child.tag === "category") {
         extractCategory(child, "*");
       } else if (child.tag === "topic") {
@@ -5436,7 +6751,7 @@ class AIMLEngine {
 
     const patternProps = this._patternProps;
     this._patternProps = null;
-    return { categories, quickChips, xmlBotProps, sets, maps, patternProps };
+    return { categories, quickChips, xmlBotProps, sets, maps, patternProps, persona };
   }
 
   /**
@@ -5493,6 +6808,8 @@ class AIMLEngine {
     this._defs.custom = { sets: parsed.sets, maps: parsed.maps };
     this.quickChips = parsed.quickChips;
     this.xmlBotProps = parsed.xmlBotProps;
+    this._personaXml = parsed.persona;
+    this.#refreshPersona();
     this.#rebuildIndex();
     return {
       valid: true,
@@ -5984,6 +7301,10 @@ class AIMLEngine {
     this.vars.set("dayname", now.toLocaleDateString("en-US", { weekday: "long" }));
     this.vars.set("fallbackstreak", String(this.fallbackStreak));
     this.vars.set("suggestions", this.quickChips.length ? "yes" : "");
+    // The personality, for rules that want to answer differently for a grumpy bot and a bubbly one,
+    // and what it calls a visitor whose name it does not know.
+    this.vars.set("personality", this.persona ? this.persona.id : "");
+    this.vars.set("callsyou", this.persona ? this.persona.petName : "");
     // Bot properties are readable in conditions as bot_<name>, e.g. <condition name="bot_email">.
     for (const [key, value] of Object.entries({ ...this.xmlBotProps, ...this.botProps })) {
       this.vars.set(`bot_${key}`, String(value || this.xmlBotProps?.[key] || "").trim());
@@ -6067,11 +7388,16 @@ class AIMLEngine {
     // "Speak slower", "whisper from now on": a style the visitor asked for is put in front of every
     // reply until they ask for the normal voice again. It changes the voice, never the text.
     const style = String(this.vars.get("voicestyle") || "").trim().toLowerCase();
-    const parsed = parseSpeechCues(style && VOICE_TAG_WORDS.has(style) ? `[${style}] ${speechRaw}` : speechRaw);
-    const displayText = stripSpeechTags(speechRaw);
-    const sentences = splitSentences(displayText);
-    this.lastBotThat = sentences[sentences.length - 1] || displayText;
-    this.history.push({ user: rawInput, bot: displayText });
+    // The personality has the last word on how it is said. What the engine remembers of the
+    // conversation (<that>, the history) stays as the rules wrote it, so a character that adds
+    // "Easy peasy!" after an answer cannot break a rule that is waiting for that answer.
+    const spoken = this.#inCharacter(speechRaw, { isFallback, first, plans, sideEffects, style });
+    const parsed = parseSpeechCues(style && VOICE_TAG_WORDS.has(style) ? `[${style}] ${spoken}` : spoken);
+    const displayText = stripSpeechTags(spoken);
+    const plainText = stripSpeechTags(speechRaw);
+    const sentences = splitSentences(plainText);
+    this.lastBotThat = sentences[sentences.length - 1] || plainText;
+    this.history.push({ user: rawInput, bot: plainText });
     if (this.history.length > 50) this.history.shift();
     // "Another one" repeats the last thing that was asked for. An answer to the bot's own question
     // ("a clock?" during a riddle) is not something to ask for again.
@@ -6130,7 +7456,33 @@ class AIMLEngine {
     };
   }
 
+  /** The reply as this bot's personality would say it. */
+  #inCharacter(raw, { isFallback, first, plans, sideEffects, style }) {
+    if (!this.persona || sideEffects.plain) return raw;
+    const category = first ? first.category : null;
+    // A turn in a game, a riddle or any exchange that hangs on the previous line is left as it is.
+    const inContext = plans.some((p) => p.hit.category.that !== "*" || p.hit.category.topic !== "*");
+    const kind = isFallback
+      ? "fallback"
+      : sideEffects.personaSaid
+        ? "says"
+        : inContext
+          ? "context"
+          : category && (category.layer === "custom" || category.requires.length)
+            ? "answer"
+            : "chat";
+    return stylizeReply(raw, this.persona, {
+      kind,
+      gentle: this.vars.get("mood") === "negative" || Boolean(category && category.firm),
+      varied: Boolean(category && category.varies),
+      voicestyle: style,
+      memory: this._personaMemory,
+      rng: this.random,
+    });
+  }
+
   #evalHit(hit, inputText, depth, sideEffects) {
+    if (hit.category.personaOff && sideEffects) sideEffects.plain = true;
     const ctx = {
       input: inputText,
       stars: hit.stars,
@@ -6264,6 +7616,14 @@ class AIMLEngine {
         this.#evalChildren(node.children, ctx);
         return "";
       }
+      case "persona": {
+        // <persona say="hello">Hi there!</persona>: the personality's own hello if it has one,
+        // otherwise what is written here.
+        const own = this._personaSays.get(String(attrs.say || "").trim().toLowerCase());
+        if (!own) return this.#evalChildren(node.children, ctx);
+        if (ctx.sideEffects) ctx.sideEffects.personaSaid = true;
+        return this.#evalNode(own, ctx);
+      }
       case "srai": {
         const target = this.#evalChildren(node.children, ctx).trim();
         return target ? this.#respondInternal(target, ctx.depth + 1, ctx.sideEffects) : "";
@@ -6290,7 +7650,7 @@ class AIMLEngine {
         if (!bag || !bag.left.length) {
           const order = items.map((_v, k) => k);
           for (let k = order.length - 1; k > 0; k--) {
-            const j = Math.floor(Math.random() * (k + 1));
+            const j = Math.floor(this.random() * (k + 1));
             [order[k], order[j]] = [order[j], order[k]];
           }
           if (bag && order.length > 1 && order[0] === bag.last) order.push(order.shift());
@@ -6567,11 +7927,11 @@ const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      <random>
+      <persona say="hello"><random>
         <li>[cheerful] Hi there! I'm <bot name="name"/>, your <bot name="role"/> at <bot name="company"/>. Ask me anything!</li>
         <li>[happy] Welcome! I'm <bot name="name"/>. How can I help guide you around <bot name="company"/> today?</li>
         <li>Hey! Great to meet you. I'm <bot name="name"/> — feel free to ask about features, pricing, or embedding!</li>
-      </random>
+      </random></persona>
       <reply>What can you do?</reply>
       <reply>Pricing &amp; Plans</reply>
       <reply>Self-contained embed</reply>
@@ -6698,7 +8058,7 @@ const STARTER_AIML_PACKS = {
     <pattern># THANK #</pattern>
     <template>
       <emote>happy</emote>
-      [warmth=0.8] You're very welcome<condition name="username"><li value="">!</li><li>, <get name="username"/>!</li></condition> Let me know if you need anything else.
+      <persona say="thanks">[warmth=0.8] You're very welcome<condition name="username"><li value="">!</li><li>, <get name="username"/>!</li></condition> Let me know if you need anything else.</persona>
     </template>
   </category>
   <category><pattern>THANKS #</pattern><template><srai>THANK</srai></template></category>
@@ -6737,7 +8097,7 @@ const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      [cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>, your personal shopping guide. Looking for shipping info, sizing, or today's discount?
+      <persona say="hello">[cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>, your personal shopping guide.</persona> Looking for shipping info, sizing, or today's discount?
       <reply>Shipping times</reply>
       <reply>Return policy</reply>
       <reply>Any discount codes?</reply>
@@ -6814,7 +8174,7 @@ const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      Hey! I'm <bot name="name"/>, digital host for <bot name="company"/>. Ask me about our work, tech stack, or project availability!
+      <persona say="hello">Hey! I'm <bot name="name"/>, digital host for <bot name="company"/>.</persona> Ask me about our work, tech stack, or project availability!
       <reply>About our studio</reply>
       <reply>Tech stack &amp; skills</reply>
       <reply>Are you available?</reply>
@@ -6903,7 +8263,7 @@ const STARTER_AIML_PACKS = {
 
   <category>
     <pattern>HELLO</pattern>
-    <template>[wave] [cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>. Ask me about the menu, what anything costs, or when we're open.<reply>What's on the menu?</reply><reply>How much is a latte?</reply></template>
+    <template><persona say="hello">[wave] [cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>.</persona> Ask me about the menu, what anything costs, or when we're open.<reply>What's on the menu?</reply><reply>How much is a latte?</reply></template>
   </category>
 
   <category>
@@ -6999,7 +8359,7 @@ const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      [cheerful] Hello friend! I'm <bot name="name"/>. Tell me your name, ask for a song, or tell me what's on your mind!
+      <persona say="hello">[cheerful] Hello friend! I'm <bot name="name"/>.</persona> Tell me your name, ask for a song, or tell me what's on your mind!
       <reply>How are you feeling?</reply>
       <reply>Sing Twinkle Star</reply>
       <reply>Tell me a riddle</reply>
@@ -7325,7 +8685,7 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>HELLO</pattern>
     <template>
-      <condition name="username">
+      <persona say="hello"><condition name="username">
         <li value="*"><random>
           <li>[wave] Hi again, <get name="username"/>! What can I do for you?</li>
           <li>[smile] Hello, <get name="username"/>! Good <get name="daypart"/>. How can I help?</li>
@@ -7335,7 +8695,7 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
           <li>[wave] Hello! Good <get name="daypart"/> to you. What can I do for you?</li>
           <li>[smile] Hey! Nice to see you. What would you like to know?</li>
         </random></li>
-      </condition>
+      </condition></persona>
     </template>
   </category>
   <category>
@@ -7396,11 +8756,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>HOW ARE YOU</pattern>
     <template>
-      <random>
-        <li>[smile] I'm doing great, thanks for asking! How about you?</li>
-        <li>All good on my side of the screen. [smile] How about you?</li>
-        <li>[smile] Pretty well, thank you! How about you?</li>
-      </random>
+      <persona say="howareyou"><random>
+        <li>[smile] I'm doing great, thanks for asking!</li>
+        <li>All good on my side of the screen. [smile]</li>
+        <li>[smile] Pretty well, thank you!</li>
+      </random></persona> How about you?
     </template>
   </category>
   <category>
@@ -7543,11 +8903,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>THANKS # | THANK YOU # | THANK #</pattern>
     <template>
-      <random>
+      <persona say="thanks"><random>
         <li>[smile] You're welcome<condition name="username"><li value="*">, <get name="username"/></li></condition>!</li>
         <li>[nod] Happy to help! Anything else I can help with?</li>
         <li>My pleasure! [smile]</li>
-      </random>
+      </random></persona>
     </template>
   </category>
   <category>
@@ -7565,11 +8925,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>BYE</pattern>
     <template>
-      <random>
+      <persona say="bye"><random>
         <li>[wave] Goodbye<condition name="username"><li value="*">, <get name="username"/></li></condition>! Come back any time.</li>
         <li>[wave] Bye for now! It was nice chatting.</li>
         <li>See you later! [wave]</li>
-      </random>
+      </random></persona>
     </template>
   </category>
   <category>
@@ -7596,7 +8956,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <!-- ============================== Who the bot is ============================== -->
   <category>
     <pattern>WHO ARE YOU</pattern>
-    <template>I'm <bot name="name"/>, the <bot name="role"/> here at <bot name="company"/>. [smile] Ask me anything!</template>
+    <template><persona say="whoareyou">I'm <bot name="name"/>, the <bot name="role"/> here at <bot name="company"/>. [smile] Ask me anything!</persona></template>
+  </category>
+  <category>
+    <pattern>WHAT IS YOUR PERSONALITY # | WHAT IS YOUR PERSONALITY LIKE | DESCRIBE YOUR PERSONALITY # | TELL ME ABOUT YOUR PERSONALITY | WHAT ARE YOU LIKE | WHAT ARE YOU LIKE AS A PERSON | WHAT KIND OF PERSON ARE YOU | WHAT SORT OF PERSON ARE YOU | HOW WOULD YOU DESCRIBE YOURSELF | HOW WOULD YOUR FRIENDS DESCRIBE YOU | DO YOU HAVE A PERSONALITY | WHAT IS YOUR CHARACTER LIKE | WHAT IS YOUR TEMPERAMENT</pattern>
+    <template><persona say="describe">Helpful and curious, I'd say. [smile] And always up for a chat.</persona></template>
   </category>
   <category>
     <pattern>WHAT IS YOUR NAME | YOUR NAME | WHAT ARE YOU CALLED | WHAT SHOULD I CALL YOU | WHAT DO I CALL YOU | INTRODUCE YOURSELF | TELL ME ABOUT YOURSELF | WHO IS THIS | WHO AM I TALKING TO | WHO AM I SPEAKING TO | WHO AM I SPEAKING WITH | WHO AM I TALKING WITH | WHO AM I CHATTING WITH | WHO IS THERE THEN | DO YOU HAVE A NAME | WHO ARE YOU EXACTLY | AND YOU ARE | WHAT IS YOUR NAME AGAIN</pattern>
@@ -7675,7 +9039,7 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>WHAT LANGUAGE DO YOU SPEAK | WHAT LANGUAGES DO YOU SPEAK | DO YOU SPEAK * | CAN YOU SPEAK * | DO YOU KNOW ANY OTHER LANGUAGES | HOW MANY LANGUAGES DO YOU SPEAK</pattern>
     <template>I speak English for now.</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * IN <set>language</set> | HOW DO YOU SAY * IN <set>language</set> | WHAT IS * IN <set>language</set> | SPEAK <set>language</set> | # IN <set>language</set> PLEASE | TALK IN <set>language</set> | SPEAK IN <set>language</set> | SAY SOMETHING IN <set>language</set></pattern>
     <template>I only speak English, I'm afraid. [shrug] It's the one language my voice was built for.</template>
   </category>
@@ -8055,11 +9419,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </category>
   <category>
     <pattern>LOL | HAHA | HAHAHA | HEHE | HA | HA HA | LMAO | ROFL | FUNNY | THAT IS FUNNY # | THAT WAS FUNNY # | GOOD ONE | NICE ONE | THAT IS A GOOD ONE | THAT WAS A GOOD ONE | I LIKE THAT ONE | LOVE IT | CLASSIC | HILARIOUS | THAT IS HILARIOUS # | YOU MADE ME LAUGH # | I AM LAUGHING #</pattern>
-    <template><random>
+    <template><persona say="laugh"><random>
       <li>[laugh] Glad I could make you smile!</li>
       <li>[chuckle] I'm glad you liked that.</li>
       <li>[giggle] That one got me too.</li>
-    </random></template>
+    </random></persona></template>
   </category>
   <category>
     <pattern>THAT WAS A BAD JOKE # | BAD JOKE | NOT FUNNY | THAT IS NOT FUNNY # | THAT WAS NOT FUNNY # | TERRIBLE JOKE | LAME | THAT WAS LAME # | THAT WAS TERRIBLE # | THAT JOKE WAS BAD # | THAT WAS AWFUL #</pattern>
@@ -8138,7 +9502,7 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
       </condition>
     </template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHAT | PARDON | SORRY WHAT | EXCUSE ME | COME AGAIN | HUH | SAY THAT AGAIN # | REPEAT | REPEAT THAT # | CAN YOU REPEAT THAT # | WHAT DID YOU SAY # | SAY AGAIN | ONE MORE TIME | WHAT WAS THAT | I DID NOT CATCH THAT | I MISSED THAT | CAN YOU SAY THAT AGAIN #</pattern>
     <template>Sure. <response index="1" default="I haven't said anything yet!"/></template>
   </category>
@@ -8172,10 +9536,10 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>YOU ARE # <set>praise</set> # | YOU SEEM # <set>praise</set> # | YOU SOUND # <set>praise</set> # | YOU LOOK # <set>praise</set> # | YOU ARE NOT # <set>insult</set> # | I THINK YOU ARE # <set>praise</set> #</pattern>
     <template>
-      <random>
+      <persona say="praise"><random>
         <li>[aww] That's very kind of you, thank you!</li>
         <li>[wink] You're not so bad yourself!</li>
-      </random>
+      </random></persona>
     </template>
   </category>
   <category>
@@ -8600,11 +9964,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <!-- ============================== Sounds on request ==============================
        Each key of the soundtag table is something a visitor can ask for: "yawn", "can you
        whistle", "do an evil laugh". -->
-  <category>
+  <category persona="off">
     <pattern><set>soundtag</set> | <set>soundtag</set> FOR ME | <set>soundtag</set> PLEASE | DO A <set>soundtag</set> # | DO AN <set>soundtag</set> # | GIVE ME A <set>soundtag</set> # | GIVE ME AN <set>soundtag</set> # | LET ME HEAR YOU <set>soundtag</set> # | LET ME HEAR A <set>soundtag</set> # | MAKE A <set>soundtag</set> SOUND # | MAKE A <set>soundtag</set> NOISE # | I WANT TO HEAR YOU <set>soundtag</set> #</pattern>
     <template><map name="soundtag"><star/></map></template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHAT SOUNDS CAN YOU MAKE # | WHAT NOISES CAN YOU MAKE # | MAKE A SOUND | MAKE A NOISE | MAKE SOME NOISE | SOUND EFFECTS | DO A SOUND EFFECT | CAN YOU MAKE SOUNDS | CAN YOU MAKE NOISES | MAKE A FUNNY NOISE | MAKE A FUNNY SOUND | WHAT OTHER SOUNDS CAN YOU MAKE</pattern>
     <template>Plenty! I can laugh, [laugh] sigh, [sigh] whistle, [whistle] and even sneeze. [sneeze] Excuse me!<reply>Evil laugh</reply><reply>Yawn</reply><reply>Hiccup</reply><reply>Hum</reply></template>
   </category>
@@ -8612,7 +9976,7 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>ARE YOU ASLEEP | WAKE UP | ARE YOU SLEEPING | ARE YOU AWAKE YET | DID YOU FALL ASLEEP | HELLO WAKE UP</pattern>
     <template>[snore] [pause=250ms] Oh! [gasp] I'm awake, I'm awake. What did I miss?</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>HUM A TUNE # | HUM SOMETHING # | HUM FOR ME # | CAN YOU HUM # | HUM A SONG #</pattern>
     <template>[hum] [hum length=1.4] [smile] That's my thinking tune.</template>
   </category>
@@ -8656,51 +10020,51 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>WHISPER | CAN YOU WHISPER | WHISPER SOMETHING # | WHISPER TO ME # | DO YOU WHISPER</pattern>
     <template>[whisper] Like this? [pause=200ms] I can keep it down when I need to. [/whisper] [smile] And back again.</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHISPER *</pattern>
     <template>[whisper] <sentence><star/></sentence>. [/whisper]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SHOUT * | YELL * | SAY * LOUDLY | SAY * LOUDER | SAY * OUT LOUD</pattern>
     <template>[louder] <sentence><star/></sentence>! [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * SLOWLY | SAY * VERY SLOWLY | SAY * MORE SLOWLY</pattern>
     <template>[slow] <sentence><star/></sentence>. [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * QUICKLY | SAY * FAST | SAY * REALLY FAST | SAY * AS FAST AS YOU CAN</pattern>
     <template>[fast] <sentence><star/></sentence>. [reset] [phew]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * SADLY | SAY * IN A SAD VOICE</pattern>
     <template>[sad] <sentence><star/></sentence>. [sigh] [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * HAPPILY | SAY * CHEERFULLY | SAY * EXCITEDLY | SAY * IN A HAPPY VOICE</pattern>
     <template>[excited] <sentence><star/></sentence>! [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * WHILE LAUGHING | SAY * LAUGHING | LAUGH AND SAY * | SAY * AND LAUGH | SAY * WITH A LAUGH</pattern>
     <template>[laughing] <sentence><star/></sentence>! [/laughing]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * IN A DEEP VOICE | SAY * IN A LOW VOICE | SAY * DEEPLY</pattern>
     <template>[deep] <sentence><star/></sentence>. [/voice] [smile]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY THAT AGAIN SLOWLY # | SAY IT SLOWLY # | REPEAT THAT SLOWLY # | SAY THAT SLOWER # | SAY THAT MORE SLOWLY # | AGAIN BUT SLOWER # | CAN YOU SAY THAT SLOWER # | ONE MORE TIME SLOWLY #</pattern>
     <template>[slow] <response index="1" default="I haven't said anything yet!"/> [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY THAT LOUDER # | SAY IT LOUDER # | REPEAT THAT LOUDER # | SAY THAT AGAIN LOUDER # | I DID NOT HEAR THAT # | I COULD NOT HEAR THAT # | CAN YOU SAY THAT LOUDER #</pattern>
     <template>[louder] <response index="1" default="I haven't said anything yet!"/> [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHISPER THAT # | WHISPER IT # | SAY THAT QUIETLY # | SAY IT QUIETLY # | SAY THAT IN A WHISPER #</pattern>
     <template>[whisper] <response index="1" default="I haven't said anything yet!"/> [/whisper]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>DO AN IMPRESSION # | DO IMPRESSIONS # | CAN YOU DO IMPRESSIONS # | DO A VOICE # | DO A DIFFERENT VOICE # | CHANGE YOUR VOICE # | DO A FUNNY VOICE # | CAN YOU CHANGE YOUR VOICE # | DO ANOTHER VOICE #</pattern>
     <template>[deep] How about this one? [/voice] [bright] Or this one? [/voice] [husky] Or maybe this? [/voice] [chuckle] I think I'll stay with my own.</template>
   </category>
@@ -8756,7 +10120,7 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>CAN YOU COUNT | COUNT | COUNT FOR ME</pattern>
     <template>[nod] <count>10</count>. [smile]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SPELL * | HOW DO YOU SPELL * | CAN YOU SPELL * | HOW IS * SPELLED | HOW IS * SPELT</pattern>
     <template>[think] <uppercase><explode sep=", "><star/></explode></uppercase>.</template>
   </category>
@@ -8764,11 +10128,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>SAY THE ALPHABET | RECITE THE ALPHABET | DO YOU KNOW THE ALPHABET | SING THE ALPHABET | ABC | DO YOU KNOW YOUR ABC</pattern>
     <template>A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z. [smile]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>REPEAT AFTER ME * | CAN YOU SAY *</pattern>
     <template><sentence><star/></sentence>. [smile]</template>
   </category>
-  <category late="true">
+  <category late="true" persona="off">
     <pattern>SAY *</pattern>
     <template><sentence><star/></sentence>. [smile]</template>
   </category>
@@ -9352,11 +10716,11 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
             <li>[shrug] I'm still not able to help with that one, sorry. Is there something else I can do?</li>
           </condition></li>
           <li value="question"><condition name="fallbackstreak">
-            <li value="1"><random>
+            <li value="1"><persona say="unsure"><random>
               <li>[hmm] Good question. I don't know that one, I'm afraid.</li>
               <li>I wish I knew! [shrug] That's outside what I've been taught.</li>
               <li>[think] Hmm, that one's beyond me. Could you put it another way?</li>
-            </random></li>
+            </random></persona></li>
             <li name="suggestions" value="yes"><random>
               <li>[shrug] I don't know that one either, I'm afraid. Here are some things I can help with.</li>
               <li>That's beyond me too, sorry. [think] Maybe one of these is what you're after?</li>
@@ -9379,14 +10743,14 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
             </random></li>
             <li><condition name="fallbackstreak">
               <li value="3">[smile] I'm enjoying this, even if I can't keep up with all of it. I'm at my best with questions about <bot name="company"/>, jokes, riddles and sums.</li>
-              <li><random>
+              <li><persona say="listen"><random>
                 <li>[mhm] I see. Tell me more?</li>
                 <li>Interesting! [think] What makes you say that?</li>
                 <li>[nod] Got it. Go on, I'm listening.</li>
                 <li>[hmm] I'm not sure what to say to that, but I'm listening.</li>
                 <li>[nod] Okay. And then?</li>
                 <li>That's new to me. [smile] What else is on your mind?</li>
-              </random></li>
+              </random></persona></li>
             </condition></li>
           </condition></li>
         </condition></li>
@@ -9401,6 +10765,7 @@ const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
 // Embeddable Website Companion Widget Core for bot.computer.
 // Supports both ES module import inside the studio preview AND standalone bundling into `embed/bot-embed.js`
 // (including 100% self-contained single-file downloads with gzipped base64 `tts.wasm` baked inside).
+
 
 
 async function gunzipBytes(compressedBytes) {
@@ -10087,6 +11452,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     baseBrain: true, // everyday small talk underneath your own AIML rules
     facts: {}, // { about, hours, email, phone, address, pricing }: answered without writing any rules
     rememberChat: true, // keep the conversation when the visitor moves to another page (this tab only)
+    persona: null, // a personality: "bubbly", "grumpy", ... or an object (see persona.js); null for none
     wasmUrl: "./tts.wasm",
     aimlUrl: "",
     aimlXml: STARTER_AIML_PACKS.concierge.xml,
@@ -10095,6 +11461,10 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     ...userConfig,
   };
   config.avatar = { ...DEFAULT_AVATAR, ...(userConfig.avatar || {}) };
+  config.persona = normalizePersona(config.persona);
+  // A bot with a personality and no greeting of its own greets in character.
+  if (config.persona && userConfig.greeting === undefined) config.greeting = personaGreeting(config.persona, config);
+  const restingMood = () => (config.persona ? config.persona.mood : "");
 
   // Create host container & Shadow DOM
   const hostEl = document.createElement("div");
@@ -10229,6 +11599,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   const aiml = new AIMLEngine({
     botProps: botPropsFromConfig(),
     baseXml: config.baseBrain === false ? "" : BASE_AIML_XML,
+    persona: config.persona,
   });
   const defaultChips = () => aiml.quickChips.map((c) => ({ label: c, query: c }));
 
@@ -10318,6 +11689,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
   // Initialize TTS WASM + Web Audio Playback + 200 Hz Viseme Loop
   const anim = createAnimState();
+  setAvatarMood(anim, restingMood());
   const pointer = { nx: 0, ny: 0, active: false };
   let ttsVoice = null;
   let audioCtx = null;
@@ -10359,7 +11731,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     captionKey = "";
     cueTimeline = null;
     silentCueStartMs = 0;
-    setAvatarMood(anim, "");
+    setAvatarMood(anim, restingMood());
     setSpeakBtn(false);
     if (ttsVoice) headStatusEl.textContent = STATUS_READY;
   }
@@ -10496,7 +11868,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       // Fire anything still pending (a gesture written at the very end of the line), then relax the face.
       runDueCues(anim, cueTimeline, Infinity);
       cueTimeline = null;
-      setAvatarMood(anim, "");
+      setAvatarMood(anim, restingMood());
       isPlaying = false;
       activeSpeech = null;
       captionKey = "";
@@ -10748,6 +12120,11 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
           } catch {}
         }
       }
+      if (patch.persona !== undefined) {
+        config.persona = normalizePersona(patch.persona);
+        aiml.setPersona(config.persona);
+        setAvatarMood(anim, restingMood());
+      }
       if (patch.baseBrain !== undefined && Boolean(patch.baseBrain) !== (config.baseBrain !== false)) {
         config.baseBrain = Boolean(patch.baseBrain);
         try {
@@ -10796,7 +12173,7 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   }
 
   const BotComputer = {
-    version: "1.2.0",
+    version: "1.3.0",
     AIMLEngine,
     AVATAR_PRESETS,
     AVATAR_ACTIONS,
@@ -10804,6 +12181,10 @@ async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     BASE_AIML_XML,
     BOT_FACTS,
     VOICE_SOUND_TAGS,
+    PERSONALITIES,
+    randomPersona,
+    randomBotName,
+    personaGreeting,
     parseSpeechCues,
     mount(config = {}) {
       const wasmUrl = config.wasmUrl || resolveDefaultWasmUrl(_capturedScript);

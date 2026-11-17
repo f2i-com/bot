@@ -147,6 +147,7 @@
       <button type="button" class="demo-btn primary" id="trigPitch">Have her pitch the product</button>
       <button type="button" class="demo-btn" id="trigAskPrice">Ask about pricing</button>
       <button type="button" class="demo-btn" id="trigSing">Make her sing</button>
+      <button type="button" class="demo-btn" id="trigPersona">Change her personality</button>
     </div>
 
     <div class="grid">
@@ -198,6 +199,15 @@
       };
       document.getElementById("trigSing").onclick = () => {
         bot.ask("Sing me a song!");
+      };
+      // The same rules, a different character each time: she says hello in her new voice.
+      const characters = ["grumpy", "bubbly", "professional", "dramatic", "shy", "witty", "calm", "friendly"];
+      let characterAt = 0;
+      document.getElementById("trigPersona").onclick = (event) => {
+        const next = characters[characterAt++ % characters.length];
+        bot.updateConfig({ persona: next });
+        event.currentTarget.textContent = `Now she is ${next}. Change again`;
+        bot.ask("hello");
       };
     });
   </script>

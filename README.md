@@ -7,16 +7,18 @@
 ## Features
 
 - **Interactive Body & Face Sculpting**: Drag handles directly on your companion's head, jaw, chin, neck, shoulders, chest, waist, and arms (mouse + mobile touch) or fine-tune proportions via studio sliders.
-- **200 Hz Vocal-Tract Lip Sync (`tts.wasm`)**: Real-time 24 kHz physical vocal-tract speech synthesis drives 9 articulatory parameters every 5 ms (`jaw`, `tongueHeight`, `tongueFront`, `tongueTip`, `lipRound`, `lipSpread`, `lipClose`, `velum`, `energy`) plus prosodic brow lift, head nods, and cursor eye-tracking.
+- **200 Hz Vocal-Tract Lip Sync (`tts.wasm`)**: Real-time 24 kHz physical vocal-tract speech synthesis drives 9 articulatory parameters every 5 ms (`jaw`, `tongueHeight`, `tongueFront`, `tongueTip`, `lipRound`, `lipSpread`, `lipClose`, `velum`, `energy`) plus prosodic brow lift, head nods, and cursor eye-tracking. The bundled engine is `tts.wasm` 1.2, whose consonants and two default voices were fitted to real speakers for a more natural sound.
 - **AIML 2.0 XML Chatbot Brain**: Turn any companion into an interactive Q&A guide using standard AIML XML (`<pattern>`, `*` / `_` / `#` / `^` wildcards, `<srai>`, `<random>`, `<that>`, `<topic>`, `<set>`/`<get>` memory, `<condition>`, `<emote>`, and `<reply>` quick chips), plus word sets and lookup maps (`<set>` in patterns, `<map>` in templates), arithmetic (`<calc>`), date maths, and rules that can step aside (`<fallback/>`).
 - **Inline Avatar Actions**: Write `[wave]`, `[wink]`, `[nod]`, `[smile]`, `[laugh]`, `[think]`, `[surprised]`, `[shake]`, `[shrug]`, `[thumbsup]`, `[tilt]` or `[bow]` anywhere in a greeting or an answer. The tag is never spoken; the avatar performs it when the speech reaches that point. Voice styles such as `[cheerful]`, `[sad]` and `[serious]` also set the face.
-- **A Voice That Laughs, Sighs and Whispers**: With `tts.wasm` 1.1 the voice makes 53 sounds that are not words, and the avatar acts each one out as it is heard: `[laugh]`, `[chuckle]`, `[giggle]`, `[gasp]`, `[sigh]`, `[yawn]`, `[hmm]`, `[aww]`, `[phew]`, `[whistle]`, `[ahem]`, `[sneeze]` and more. It can also speak while laughing (`[laughing] ... [/laughing]`, or the "Laughing while speaking" slider). The studio has a palette that plays any sound and inserts its tag, and captions say what was heard: "(laughs)".
-- **Base Brain for General Conversation**: A built-in AIML layer of about 360 rules sits underneath your own, which always win. It handles greetings and goodbyes, how the visitor feels (with care for the serious cases), questions about the bot itself, compliments and complaints, jokes, riddles, trivia, rock paper scissors, guess my number, knock knock jokes, sums ("what's 15% of 80?"), unit conversions, dates ("how many days until Christmas?"), capitals and a little general knowledge. It remembers what a visitor says about themselves (name, age, work, pets, likes, favourites) for as long as the tab is open, and forgets it on request. How well does it do? On the five test conversations used to build it (33 to 159 everyday lines each) it has a specific, fitting answer for 93% to 99% of lines. Those scripts shaped the rules, so that is the best case. Each new script, on its first run, got a specific answer to between 57% and 68% of its lines; most of the rest got an honest "I don't know that one" or a sympathetic general reply, and a few got a wrong answer that was then fixed. It is a rule-based bot, not a language model: expect good small talk, not open-ended conversation.
+- **A Voice That Laughs, Sighs and Whispers**: The voice makes 53 sounds that are not words, and the avatar acts each one out as it is heard: `[laugh]`, `[chuckle]`, `[giggle]`, `[gasp]`, `[sigh]`, `[yawn]`, `[hmm]`, `[aww]`, `[phew]`, `[whistle]`, `[ahem]`, `[sneeze]` and more. It can also speak while laughing (`[laughing] ... [/laughing]`, or the "Laughing while speaking" slider). The studio has a palette that plays any sound and inserts its tag, and captions say what was heard: "(laughs)".
+- **Personalities**: Give a bot a character (friendly, bubbly, calm, professional, witty, shy, grumpy, dramatic, laid-back or curious) and the same rules come out differently: its own hello and goodbye, "I'm" or "I am", exclamation marks or none, the laugh it laughs, the things it tends to say first and last, a catchphrase, what it calls visitors. Four dials (energy, formality, playfulness, chattiness) and a set of speaking habits are yours to change, and none of it touches your AIML. See [Personalities](#personalities).
+- **Bot Generator**: One click makes a whole new bot: a name, a look, a voice and a personality that go together, with a greeting in that personality's own words. Tick which of the four it may change. "Download config" saves the result as one JSON file and "Load config" brings it back.
+- **Base Brain for General Conversation**: A built-in AIML layer of about 390 rules sits underneath your own, which always win. It handles greetings and goodbyes, how the visitor feels (with care for the serious cases), questions about the bot itself, compliments and complaints, jokes, riddles, trivia, rock paper scissors, guess my number, knock knock jokes, sums ("what's 15% of 80?"), unit conversions, dates ("how many days until Christmas?"), capitals and a little general knowledge. It remembers what a visitor says about themselves (name, age, work, pets, likes, favourites) for as long as the tab is open, and forgets it on request. How well does it do? On the five test conversations used to build it (33 to 159 everyday lines each) it has a specific, fitting answer for 93% to 99% of lines. Those scripts shaped the rules, so that is the best case. Each new script, on its first run, got a specific answer to between 57% and 68% of its lines; most of the rest got an honest "I don't know that one" or a sympathetic general reply, and a few got a wrong answer that was then fixed. It is a rule-based bot, not a language model: expect good small talk, not open-ended conversation.
 - **Conversation That Keeps Its Thread**: "What's the capital of France?" then "and Germany?" continues the question. "My friend says the toasties are great" then "how much are they?" knows what "they" are. A riddle waits for a guess, but lets go when the subject changes. Something it has no rule for is answered in keeping with how it sounds: sympathy for a rough day, a question it cannot answer is admitted honestly, and a request it cannot help with is pointed to your contact details.
 - **Matching That Understands What Was Meant**: Typos, chat shorthand ("whats ur pricing"), stretched words ("heyyy"), other forms of a word ("shipped" for "shipping"), synonyms ("fees" for "pricing", "voucher" for "discount"), everyday phrases ("money back"), several questions in one message ("hours and address?"), and being addressed by name. Wording no pattern anticipated is matched by what it is about, and when two rules fit equally well the bot offers both as "did you mean" suggestions instead of guessing. A reply is computed in about a millisecond, so it appears the moment Send is pressed.
 - **Business Facts, No Rules Needed**: Fill in what you do, opening hours, email, phone, address and pricing, and the bot answers questions about them by itself. Phone numbers are read digit by digit and "Mon-Fri" is spoken as "Monday to Friday", while the chat bubble keeps the original text with clickable links.
-- **Deeper Customisation**: Resting expression (smile, brow mood, eye openness), freckles, age lines, a beauty mark, eyeshadow, separate brow colour, earrings, neckwear (necklace, bow tie, scarf, lanyard), headwear (beanie, cap, headband, beret, headphones, headscarf), glasses including cat-eye and aviators, outfits including a polo, a scoop-neck top and an apron, hairstyles including twin braids and an optional fringe, extra backdrops, sculpt handles for brows, nose and hips, and "Random face" / "Random style" buttons. Left alone, the avatar makes small movements of its own.
-- **100% Self-Contained Single-File Export**: Download a single local `<name>-bot.js` script (about 1.3 MB) with your sculpted avatar, voice settings, embedded AIML XML, and gzipped `tts.wasm` baked inside — zero servers, zero API keys, and zero external dependencies.
+- **Deeper Customisation**: Resting expression (smile, brow mood, eye openness), freckles, age lines, a beauty mark, eyeshadow, separate brow colour, earrings, neckwear (necklace, bow tie, scarf, lanyard), headwear (beanie, cap, headband, beret, headphones, headscarf), glasses including cat-eye and aviators, outfits including a polo, a scoop-neck top, an apron, a graphic tee, a button-up shirt, a cardigan and a zip jacket, hairstyles including twin braids, pigtails, space buns, a mohawk and an optional fringe, more headwear (hair bow, flower, tiara, fedora, chef's hat), a brooch, dimples, eyeliner, a nose stud, eyes of two different colours, extra backdrops, sculpt handles for brows, nose and hips, and "Random face" / "Random style" buttons. Left alone, the avatar makes small movements of its own.
+- **100% Self-Contained Single-File Export**: Download a single local `<name>-bot.js` script (about 1.4 MB) with your sculpted avatar, voice settings, embedded AIML XML, and gzipped `tts.wasm` baked inside — zero servers, zero API keys, and zero external dependencies.
 - **Studio Conveniences**: Undo / redo for the avatar's look (Ctrl+Z, Ctrl+Shift+Z), autosave of your design in the browser, save / load of the full configuration as JSON, a live articulation scope that traces jaw, tongue, lips, nasal and voicing while the bot speaks, a list of your rules with Try / Find / Remove, and a rule checker that points out misspelled `[actions]`, unknown tags, duplicate patterns and `<srai>` links that lead nowhere.
 - **Mobile-First Studio & Embedded Dock**: Sticky docked mobile stage, thumb-friendly bottom navigation bar, touch-scaled sculpt handles, and Shadow-DOM-isolated mobile companion widget.
 
@@ -102,6 +104,70 @@ BotComputer.VOICE_SOUND_TAGS;         // every sound tag the voice performs
 ```
 
 To give the bot its own voice for small talk, define any of `HELLO`, `HOW ARE YOU`, `WHO ARE YOU`, `WHAT CAN YOU DO`, `THANKS #`, `BYE`, `# JOKE #`, `# SING #` or `*` in your document and the base version steps aside. The full base layer is exported as `BotComputer.BASE_AIML_XML` (and `BASE_AIML_XML` from `src/aiml-engine.js`).
+
+## Personalities
+
+A personality never changes which rule answers a question. It changes how the answer is worded and delivered, so one AIML document can power a bubbly bot on one site and a dry, formal one on another.
+
+```js
+const bot = await BotComputer.mount({ name: "Juno", persona: "bubbly" });   // a built-in character
+bot.updateConfig({ persona: { id: "grumpy", chattiness: 0.8, laugh: "snicker", catchphrase: "Typical." } });
+bot.updateConfig({ persona: null });                                         // exactly as written again
+
+BotComputer.PERSONALITIES;                       // the ten characters and everything they say
+const persona = BotComputer.randomPersona();     // a new one: a character with its dials and habits shuffled
+const name = BotComputer.randomBotName("neutral");
+const greeting = BotComputer.personaGreeting(persona, { name, role: "Guide", company: "Acme" });
+```
+
+With a `persona` and no `greeting`, the bot greets in character. What a personality is made of:
+
+| Part | What it does |
+|---|---|
+| `id` | The character: `friendly`, `bubbly`, `calm`, `professional`, `witty`, `shy`, `grumpy`, `dramatic`, `laidback`, `curious`. It supplies the lines below and the defaults for everything else. |
+| `energy` (0 to 1) | Low: exclamation marks become full stops and `[cheerful]` is spoken calmly. High: a short plain statement gets an exclamation mark. |
+| `formality` | High: "I'm" becomes "I am", "isn't it?" becomes "is it not?". Low: the other way round. |
+| `playfulness` | Low: the bot does not laugh, even where a rule says `[laugh]`. Higher: it adds its favourite gesture more often. |
+| `chattiness` | How often its opening and closing habits appear. 0 switches them off. |
+| `delivery`, `mood` | The voice style it speaks in (`cheerful`, `calm`, `soft`, `dramatic` ...) and the face it wears at rest. |
+| `laugh`, `think`, `gesture` | The sound used wherever a rule says `[laugh]`, `[chuckle]` or `[giggle]`; the one used for `[hmm]`; a gesture it is fond of. |
+| `openers`, `closers`, `catchphrase` | Things it tends to say first ("Ooh!", "Well, well."), last ("Easy peasy!") and now and then. |
+| `petName` | What it calls a visitor whose name it does not know ("mate", "friend"). |
+| `says` | Its own lines for ten moments: `hello`, `howareyou`, `whoareyou`, `thanks`, `bye`, `praise`, `laugh`, `unsure`, `listen`, `describe`. |
+
+A few guard rails are built in. A reply to someone who is upset, and any reply that is `[sad]` or `[serious]`, is left without flourishes. A turn in a game or a riddle is not decorated, and what the engine remembers for `<that>` is always the reply as the rule wrote it. A voice the visitor asked for ("speak slower") wins over the personality's. Sounds made on request ("do an evil laugh") and anything a visitor asks to have repeated are said exactly as written.
+
+**In your own AIML.** Three things are available:
+
+```xml
+<!-- 1. Let a line be said in the bot's own words when its personality has some -->
+<category>
+  <pattern>HELLO</pattern>
+  <template><persona say="hello">Hi there! Welcome to Acme.</persona> Ask me about the menu.</template>
+</category>
+
+<!-- 2. Keep a rule out of it: said exactly as written, whatever the personality -->
+<category persona="off">
+  <pattern># TERMS #</pattern>
+  <template>Our terms are at acme.example/terms. We're not able to give legal advice.</template>
+</category>
+
+<!-- 3. Answer differently for different characters -->
+<template><condition name="personality"><li value="grumpy">Bah.</li><li>Lovely!</li></condition></template>
+```
+
+The personality itself can also be written in the document, which is handy when the AIML is all you ship. It wins over a `persona` passed in the config:
+
+```xml
+<persona id="grumpy" chattiness="0.6" laugh="snicker" petname="pal">
+  <opener>Fine.</opener>
+  <opener>If you insist.</opener>
+  <closer>There. Happy?</closer>
+  <say name="hello"><li>Oh. It's you. What do you need?</li></say>
+</persona>
+```
+
+In lines written in the studio or passed in `says`, `{bot}`, `{role}` and `{company}` stand for the bot's details, `{daypart}` for morning, afternoon or evening, and `{,user}` for the visitor's name with a comma in front, or what the bot calls people, or nothing.
 
 ## Business Facts and Chat Memory
 
@@ -216,7 +282,7 @@ The studio's test chat shows which step answered under every reply.
 
 `<fallback/>` answers as though nothing had matched, which lets a rule decide it does not apply after all. `<try>COUNT TO <star/></try>` is its opposite number: it gives the answer some rule has for that text, or nothing at all if only the catch-all would reply. The base brain's `CAN YOU *` uses it to do the thing when it can.
 
-**What the engine tells your templates.** These predicates are kept up to date and can be used in `<condition>`: `voicestyle` (a speaking style put in front of every reply while it is set), `inputkind` (`request`, `question`, `statement` or `gibberish`), `mood` (`positive`, `negative`, `neutral`), `justvaried` (`yes` straight after a joke, a fact or anything else from a `<random>`), `fallbackstreak`, `didyoumean`, `daypart`, `dayname`, and `bot_<property>` for each bot property.
+**What the engine tells your templates.** These predicates are kept up to date and can be used in `<condition>`: `personality` (the bot's character, such as `grumpy`, or empty), `voicestyle` (a speaking style put in front of every reply while it is set), `inputkind` (`request`, `question`, `statement` or `gibberish`), `mood` (`positive`, `negative`, `neutral`), `justvaried` (`yes` straight after a joke, a fact or anything else from a `<random>`), `fallbackstreak`, `didyoumean`, `daypart`, `dayname`, and `bot_<property>` for each bot property.
 
 ## License
 

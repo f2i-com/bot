@@ -1020,6 +1020,110 @@ button, select, input, textarea {
   flex-wrap: wrap;
 }
 
+.generator {
+  display: inline-flex;
+  position: relative;
+  gap: 2px;
+}
+
+.generator > .btn {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.gen-menu > summary {
+  list-style: none;
+  padding-inline: 9px;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+.gen-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.gen-menu[open] > summary {
+  background: var(--bg-subtle);
+}
+
+.gen-menu-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md, 0 12px 32px rgba(15, 23, 42, 0.16));
+}
+
+/* While the menu is open its header sits above the stage, which is sticky on a phone. */
+.section-header:has(.gen-menu[open]) {
+  position: relative;
+  z-index: 60;
+}
+
+.gen-menu-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+
+.slider-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -1px;
+  font-size: 11.5px;
+  color: var(--ink-faint, var(--ink-soft));
+}
+
+.persona-selects {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.says-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.persona-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.persona-line {
+  display: grid;
+  grid-template-columns: 9.5em minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg-subtle);
+}
+
+.persona-line-label {
+  padding-top: 2px;
+  font-size: 12.5px;
+  font-weight: 620;
+  color: var(--ink-soft);
+}
+
+.persona-line p {
+  margin: 0;
+  font-size: 13.6px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .archetype-strip {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -2862,6 +2966,29 @@ input[type="color"]::-moz-color-swatch {
 
   .section-header-actions .btn {
     flex-shrink: 0;
+  }
+
+  .generator {
+    flex-shrink: 0;
+  }
+
+  .section-header-actions:has(.gen-menu[open]) {
+    overflow: visible;
+    flex-wrap: wrap;
+  }
+
+  .persona-selects,
+  .says-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .persona-line {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .persona-line-label {
+    grid-column: 1 / -1;
+    padding-top: 0;
   }
 
   .archetype-strip {

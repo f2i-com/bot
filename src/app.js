@@ -9,6 +9,7 @@ import {
   EARRING_STYLES,
   HEADWEAR_STYLES,
   NECKWEAR_STYLES,
+  BROOCH_STYLES,
   AVATAR_ACTIONS,
   DEFAULT_AVATAR,
   AVATAR_PRESETS,
@@ -36,6 +37,23 @@ import {
   BOT_FACTS,
   removeAimlRule,
 } from "./aiml-engine.js";
+import {
+  PERSONALITIES,
+  PERSONA_TRAITS,
+  PERSONA_SAYS,
+  PERSONA_DELIVERIES,
+  PERSONA_MOODS,
+  PERSONA_LAUGHS,
+  PERSONA_THINKS,
+  PERSONA_GESTURES,
+  normalizePersona,
+  randomPersona,
+  personaGreeting,
+  randomBotName,
+  describePersona,
+  personalityById,
+  stylizeReply,
+} from "./persona.js";
 import { mountBotWidget } from "./embed-widget-core.js";
 import {
   slugifyBotName,
@@ -73,6 +91,8 @@ const SKIN_MATERIAL_SLIDERS = [
   ["freckles", "Freckles", 0, 1, 0.02, ""],
   ["eyeshadow", "Eyeshadow", 0, 1, 0.02, ""],
   ["ageLines", "Age lines", 0, 1, 0.02, ""],
+  ["dimples", "Dimples", 0, 1, 0.02, ""],
+  ["eyeliner", "Eyeliner", 0, 1, 0.02, ""],
 ];
 
 const EXPRESSION_SLIDERS = [
@@ -188,6 +208,7 @@ const state = {
   aimlXml: STARTER_AIML_PACKS.concierge.xml,
   avatar: structuredClone(AVATAR_PRESETS[0].avatar),
   voiceBaseId: AVATAR_PRESETS[0].voicePreset || "",
+  persona: normalizePersona(AVATAR_PRESETS[0].persona), // how replies are worded and delivered; null for none
   showSculptHandles: true,
   activeSculptId: "",
   hoverSculptId: "",
@@ -246,6 +267,18 @@ let previewMountSeq = 0;
 let currentSnippetCode = "";
 let stageShapeBeforeCutout = "card";
 let savedVoiceSettings = null; // voice restored from autosave, applied once tts.wasm is ready
+
+// tts.wasm 1.2 refitted the two default voices to real speakers, which moved their vocal tract length.
+// A design saved before that holds the old default as if it had been chosen, so it is moved to the new
+// one, once: anything saved from now on carries `voiceTuning` and is left exactly as it was set.
+const VOICE_TUNING = 2;
+const RETUNED_TRACT_CM = { male: [17.5, 17.0], female: [13.9, 14.2] };
+
+function retuneSavedVoice(voice, savedWith) {
+  if (!voice || typeof voice !== "object" || Number(savedWith?.voiceTuning) >= VOICE_TUNING) return voice;
+  const [before, now] = RETUNED_TRACT_CM[voice.gender] || [];
+  return before && Math.abs(Number(voice.tractLengthCm) - before) < 0.005 ? { ...voice, tractLengthCm: now } : voice;
+}
 
 // ============================================================================
 // Small UI helpers: icons, button labels, toasts, clipboard
@@ -381,6 +414,7 @@ let storageWorks = true;
 function snapshotStudio() {
   return {
     v: 1,
+    voiceTuning: VOICE_TUNING,
     activePresetId: state.activePresetId,
     name: state.name,
     role: state.role,
@@ -394,6 +428,7 @@ function snapshotStudio() {
     avatar: state.avatar,
     voiceBaseId: state.voiceBaseId,
     voice: studioVoice ? studioVoice.settings : savedVoiceSettings,
+    persona: state.persona,
     embedOpts: state.embedOpts,
     auditionText: $("auditionText").value,
   };
@@ -429,6 +464,7 @@ function applyConfigObject(cfg) {
   state.aimlPackId = typeof cfg.aimlPackId === "string" ? cfg.aimlPackId : "";
   state.activePresetId = typeof cfg.activePresetId === "string" ? cfg.activePresetId : "custom";
   state.voiceBaseId = typeof cfg.voiceBaseId === "string" ? cfg.voiceBaseId : "";
+  state.persona = normalizePersona(cfg.persona); // a bot saved before personalities has none
 
   // Embed options are stored nested by autosave and flat by "Save config" / exported bots.
   const eo = cfg.embedOpts && typeof cfg.embedOpts === "object" ? cfg.embedOpts : cfg;
@@ -447,7 +483,7 @@ function restoreSavedStudio() {
     if (!raw) return;
     const saved = JSON.parse(raw);
     if (!saved || saved.v !== 1 || !applyConfigObject(saved)) return;
-    if (saved.voice && typeof saved.voice === "object") savedVoiceSettings = saved.voice;
+    if (saved.voice && typeof saved.voice === "object") savedVoiceSettings = retuneSavedVoice(saved.voice, saved);
     if (typeof saved.auditionText === "string") $("auditionText").value = saved.auditionText;
   } catch {
     // Unreadable or blocked storage: start from the default bot.
@@ -606,7 +642,7 @@ function stopChannel(chan, onStopUi) {
   chan.speech = null;
   chan.cueTimeline = null;
   chan.silentCueStartMs = 0;
-  if (chan.anim) setAvatarMood(chan.anim, "");
+  if (chan.anim) setAvatarMood(chan.anim, chan.restMood || "");
   if (onStopUi) onStopUi();
 }
 
@@ -676,7 +712,7 @@ async function playOnChannel(chan, voiceInst, rawText, { cues = null, cueWords =
     // Fire anything still pending (a gesture written at the very end of the line), then relax the face.
     runDueCues(chan.anim, chan.cueTimeline, Infinity);
     chan.cueTimeline = null;
-    if (chan.anim) setAvatarMood(chan.anim, "");
+    if (chan.anim) setAvatarMood(chan.anim, chan.restMood || "");
     chan.playing = false;
     chan.speech = null;
     chan.src = null;
@@ -747,7 +783,10 @@ async function selectHeroPersona(idx, speakGreeting = false) {
     botProps: { name: preset.name, role: preset.role, company: "bot.computer", website: "https://bot.computer" },
     xml: STARTER_AIML_PACKS.concierge.xml,
     baseXml: BASE_AIML_XML,
+    persona: preset.persona,
   });
+  heroAudio.restMood = heroAiml.persona ? heroAiml.persona.mood : "";
+  setAvatarMood(heroAnim, heroAudio.restMood);
 
   // Get the matcher up to speed before the first question is typed.
   const warming = heroAiml;
@@ -1127,6 +1166,11 @@ function syncAllAvatarControls() {
   $("neckwearColorPicker").value = av.neckwearColor || "#d9a441";
   $("fringeCheck").checked = Boolean(av.fringe);
   $("beautyMarkCheck").checked = Boolean(av.beautyMark);
+  $("noseStudCheck").checked = Boolean(av.noseStud);
+  $("broochSelect").value = av.brooch || "none";
+  $("broochColorPicker").value = av.broochColor || "#e6c35c";
+  $("oddEyesCheck").checked = Boolean(av.irisColor2);
+  if (av.irisColor2) $("irisColor2Picker").value = av.irisColor2;
   $("eyeshadowColorPicker").value = av.eyeshadowColor || "#7a5c8f";
   // An empty brow color means "follow the hair", so show the hair color until one is picked.
   $("browColorPicker").value = av.browColor || av.hairColor || "#3c2734";
@@ -1235,6 +1279,7 @@ async function applyStudioPreset(preset, speakAfter = false) {
   state.greeting = preset.greeting;
   state.avatar = structuredClone(preset.avatar);
   state.voiceBaseId = preset.voicePreset || "";
+  state.persona = normalizePersona(preset.persona);
   $("auditionText").value = preset.greeting;
 
   if (studioVoice) {
@@ -1244,6 +1289,7 @@ async function applyStudioPreset(preset, speakAfter = false) {
   syncAllAvatarControls();
   syncIdentityControls();
   rebuildStudioAiml();
+  syncPersonaControls();
   schedulePreviewSync();
 
   if (speakAfter) {
@@ -1388,6 +1434,9 @@ function speakStudioLine(text, emote = "", cueOpts = {}) {
 }
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+// Generated hair is a natural shade most of the time, and now and then something bolder.
+const NATURAL_HAIR = ["#1b1d26", "#2a1f1c", "#3c2734", "#5c3a28", "#8b4f32", "#a8642c", "#c88d48", "#d6b881", "#94a3b8", "#c9ccd4"];
+const BOLD_HAIR = ["#2563eb", "#d946a8", "#7c3aed", "#0f9d8a", "#e0453a"];
 const randBetween = (lo, hi) => Number((lo + Math.random() * (hi - lo)).toFixed(2));
 
 function randomFaceTraits(gStyle) {
@@ -1398,6 +1447,10 @@ function randomFaceTraits(gStyle) {
     freckles: Math.random() < 0.25 ? randBetween(0.3, 0.9) : 0,
     ageLines: Math.random() < 0.2 ? randBetween(0.3, 0.9) : 0,
     beautyMark: Math.random() < 0.12,
+    dimples: Math.random() < 0.25 ? randBetween(0.4, 1) : 0,
+    eyeliner: gStyle === "feminine" && Math.random() < 0.35 ? randBetween(0.4, 0.9) : 0,
+    noseStud: Math.random() < 0.08,
+    irisColor2: Math.random() < 0.03 ? pick(IRIS_PALETTE) : "",
     eyeshadow: gStyle === "feminine" && Math.random() < 0.4 ? randBetween(0.3, 0.8) : 0,
     eyeshadowColor: pick(["#7a5c8f", "#8b5a2b", "#1f9e8f", "#b0577e", "#4a5d8f"]),
     headWidth: randBetween(0.88, 1.12),
@@ -1429,18 +1482,21 @@ function randomStyleTraits(masculine) {
   const outfit = pick(OUTFIT_STYLES);
   const traits = {
     hairStyle: pick(HAIR_STYLES).id,
-    hairColor: pick(HAIR_PALETTE),
+    hairColor: Math.random() < 0.1 ? pick(BOLD_HAIR) : pick(NATURAL_HAIR),
     hairHighlight: "#94a3b8",
+    browColor: "", // brows follow the hair
     facialHair: masculine ? pick(["none", "none", "stubble", "beard", "mustache"]) : "none",
     outfitStyle: outfit.id,
     outfitPrimary: pick(["#1e2f4d", "#0f766e", "#3b234a", "#1e293b", "#5b3e31", "#1d4ed8", "#3f3f46"]),
     outfitAccent: pick(["#38bdf8", "#2dd4bf", "#f59e0b", "#fb7185", "#a78bfa", "#34d399"]),
     glasses: pick(["none", "none", "none", "classic", "round", "bold", "cat_eye", "aviator"]),
-    headsetMic: Math.random() < 0.45,
+    headsetMic: Math.random() < 0.3,
     headwear:
-      Math.random() < 0.22
-        ? pick(masculine ? ["beanie", "cap", "headphones", "beret"] : ["beanie", "cap", "headband", "beret", "headphones", "headscarf"])
+      Math.random() < 0.26
+        ? pick(masculine ? ["beanie", "cap", "headphones", "beret", "fedora"] : ["beanie", "cap", "headband", "beret", "headphones", "headscarf", "bow", "flower", "fedora", "tiara"])
         : "none",
+    brooch: Math.random() < 0.18 ? pick(["round", "star", "heart", "flower"]) : "none",
+    broochColor: pick(["#e6c35c", "#d8dde6", "#e04a6b", "#38bdf8", "#34d399"]),
     neckwear: Math.random() < 0.3 ? pick(["necklace", "bowtie", "scarf", "lanyard"]) : "none",
     neckwearColor: pick(["#d9a441", "#c9d3e0", "#b4452f", "#1a5fe6", "#2f6f5e", "#e04a6b"]),
     fringe: Math.random() < 0.2,
@@ -1449,6 +1505,11 @@ function randomStyleTraits(masculine) {
     earringColor: pick(["#e6c35c", "#d8dde6", "#9ad0ff"]),
   };
   if (outfit.id === "cyber") traits.synthFinish = 0.75;
+  // Someone in an apron may well be the chef.
+  if (outfit.id === "apron" && Math.random() < 0.45) Object.assign(traits, { headwear: "chef", headwearColor: "#f4f6fb", headsetMic: false });
+  // A tiara and a headset do not go together.
+  if (traits.headwear === "tiara" || traits.headwear === "chef" || traits.headwear === "fedora") traits.headsetMic = false;
+  if (traits.headwear === "tiara") traits.headwearColor = pick(["#e6c35c", "#d8dde6"]);
   return traits;
 }
 
@@ -1478,20 +1539,304 @@ function randomizeStyle() {
   triggerAvatarEmote(studioAnim, "nod");
 }
 
-function randomizeEverything() {
-  const gStyle = pick(["feminine", "masculine", "neutral"]);
-  const vGender = gStyle === "masculine" ? "male" : gStyle === "feminine" ? "female" : pick(["female", "male"]);
+/** Which parts of the bot "Generate a bot" replaces, as ticked in its menu. */
+function generatorParts() {
+  const parts = {};
+  for (const box of document.querySelectorAll("#generatorMenu input[data-gen]")) parts[box.dataset.gen] = box.checked;
+  return parts;
+}
 
-  Object.assign(state.avatar, { synthFinish: 0 }, randomFaceTraits(gStyle), randomBodyTraits(), randomStyleTraits(vGender === "male"));
+/**
+ * Makes a new bot: a name, a look, a voice and a personality that go together, with a greeting in
+ * that personality's own words. The chat rules and the business details are yours and are kept.
+ */
+function generateBot() {
+  const want = generatorParts();
+  if (!Object.values(want).some(Boolean)) {
+    $("generatorMenu").open = true;
+    toast("Tick at least one thing for Generate to change", { error: true });
+    return;
+  }
+  const oldName = state.name;
+  const gStyle = want.look ? pick(["feminine", "masculine", "neutral"]) : state.avatar.genderStyle;
+  const currentGender = studioVoice ? studioVoice.settings.gender : gStyle === "masculine" ? "male" : "female";
+  const vGender = want.voice ? (gStyle === "masculine" ? "male" : gStyle === "feminine" ? "female" : pick(["female", "male"])) : currentGender;
 
-  if (studioVoice) {
+  if (want.persona) state.persona = randomPersona();
+  const character = state.persona ? personalityById(state.persona.id) : null;
+
+  if (want.look) {
+    Object.assign(state.avatar, { synthFinish: 0 }, randomFaceTraits(gStyle), randomBodyTraits(), randomStyleTraits(vGender === "male"));
+  }
+  // The face a character wears at rest goes with its temperament: a grumpy brow, a bubbly smile.
+  if (character && (want.look || want.persona)) {
+    const near = (value, lo, hi) => Number(Math.min(hi, Math.max(lo, value + (Math.random() - 0.5) * 0.2)).toFixed(2));
+    Object.assign(state.avatar, {
+      restSmile: near(character.face.restSmile, -0.4, 1),
+      browMood: near(character.face.browMood, -1, 1),
+      eyeOpen: near(character.face.eyeOpen, -0.5, 0.5),
+    });
+  }
+  if (want.voice && studioVoice) {
     studioVoice.randomize({ gender: vGender });
+    if (character) {
+      // And so does its pace: a calm character speaks a little slower, a lively one with more lilt.
+      const s = studioVoice.settings;
+      studioVoice.configure({
+        speed: Number(Math.min(1.4, Math.max(0.75, s.speed * character.voice.speed)).toFixed(2)),
+        expressiveness: Number(Math.min(1.8, Math.max(0.4, s.expressiveness * character.voice.expressiveness)).toFixed(2)),
+      });
+    }
     state.voiceBaseId = "";
-    syncVoiceControls();
+  }
+  if (want.name) state.name = randomBotName(gStyle, Math.random, oldName);
+  if (want.persona) {
+    state.greeting = personaGreeting(state.persona, { name: state.name, role: state.role, company: state.company });
+  } else if (want.name && oldName) {
+    state.greeting = state.greeting.split(oldName).join(state.name); // a greeting you wrote keeps its words
+  }
+  $("auditionText").value = state.greeting;
+
+  syncVoiceControls();
+  syncIdentityControls();
+  commitAvatarChange();
+  rebuildStudioAiml();
+  syncPersonaControls();
+  if (want.name || want.persona) resetStudioChat();
+  speakStudioLine(state.greeting, "wave");
+  toast(`Meet ${state.name}${state.persona ? `. ${describePersona(state.persona)}.` : ""}`, { ms: 3600 });
+}
+
+// ============================================================================
+// Personality: the character, its temperament and its speaking habits
+// ============================================================================
+
+const PERSONA_SELECTS = [
+  ["delivery", "Speaks in a voice that is", PERSONA_DELIVERIES, { "": "As written", cheerful: "Cheerful", happy: "Happy", excited: "Excited", calm: "Calm", soft: "Soft", serious: "Serious", dramatic: "Dramatic" }],
+  ["laugh", "Laughs with a", PERSONA_LAUGHS, { "": "As written", laugh: "Laugh", chuckle: "Chuckle", giggle: "Giggle", hehe: "Hehe", hoho: "Ho ho ho", snicker: "Snicker", cackle: "Cackle", guffaw: "Belly laugh", nervous: "Nervous laugh" }],
+  ["think", "Thinks with a", PERSONA_THINKS, { "": "As written", hmm: "Hmm", um: "Um", uh: "Uh", mm: "Mm", ooh: "Ooh" }],
+  ["gesture", "Favorite gesture", PERSONA_GESTURES, { "": "None", smile: "Smile", wink: "Wink", nod: "Nod", tilt: "Head tilt", thumbsup: "Thumbs up", shrug: "Shrug", bow: "Bow", wave: "Wave" }],
+  ["mood", "Resting face", PERSONA_MOODS, { "": "Neutral", happy: "Happy", excited: "Excited", calm: "Calm", serious: "Serious" }],
+];
+const PERSONA_TEXT_HABITS = [
+  ["personaOpenersInput", "openers"],
+  ["personaClosersInput", "closers"],
+  ["personaCatchphraseInput", "catchphrase"],
+  ["personaPetNameInput", "petName"],
+];
+
+let personaPreviewTimer = 0;
+
+/** "Calm", "Lively" or "Balanced", for the label beside a temperament slider. */
+function traitWord(key, value) {
+  const [, , low, high] = PERSONA_TRAITS.find(([k]) => k === key);
+  return value >= 0.66 ? high : value <= 0.34 ? low : "Balanced";
+}
+
+function buildPersonaControls() {
+  $("personaPills").replaceChildren(
+    makeChoicePill("None", { personaId: "" }, () => choosePersonality(""), "Every reply is said exactly as it is written"),
+    ...PERSONALITIES.map((p) => makeChoicePill(p.label, { personaId: p.id }, () => choosePersonality(p.id), p.blurb))
+  );
+
+  const sliders = $("personaSlidersHost");
+  sliders.replaceChildren();
+  for (const [key, label, low, high] of PERSONA_TRAITS) {
+    const wrap = document.createElement("div");
+    wrap.className = "slider-item";
+    const id = `sl_pe_${key}`;
+    wrap.innerHTML = `
+      <div class="slider-top">
+        <label for="${id}">${label}</label>
+        <span class="slider-val static" id="val_pe_${key}"></span>
+      </div>
+      <input type="range" id="${id}" data-pe-key="${key}" min="0" max="1" step="0.01" value="0.5">
+      <div class="slider-ends" aria-hidden="true"><span>${low}</span><span>${high}</span></div>
+    `;
+    const input = wrap.querySelector("input");
+    input.addEventListener("input", () => {
+      if (!state.persona) return;
+      state.persona[key] = Number(input.value);
+      $(`val_pe_${key}`).textContent = traitWord(key, state.persona[key]);
+      onPersonaChange(false);
+    });
+    sliders.appendChild(wrap);
   }
 
-  commitAvatarChange();
-  speakStudioLine("[cheerful] Hello! [wave] I was just sculpted with a brand new vocal tract and body build! [wink]");
+  const selects = $("personaSelectsHost");
+  selects.replaceChildren();
+  for (const [key, label, options, names] of PERSONA_SELECTS) {
+    const field = document.createElement("label");
+    field.className = "field";
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    const select = document.createElement("select");
+    select.id = `personaSel_${key}`;
+    for (const value of options) select.add(new Option(names[value] ?? value, value));
+    select.addEventListener("change", () => {
+      if (!state.persona) return;
+      state.persona[key] = select.value;
+      onPersonaChange(false);
+      // Let the choice be heard or seen straight away.
+      if ((key === "laugh" || key === "think") && select.value) speakStudioLine(`[${select.value}]`);
+      else if (key === "gesture" && select.value) triggerAvatarEmote(studioAnim, select.value);
+      else if (key === "delivery") speakStudioLine(`${select.value ? `[${select.value}] ` : ""}This is how I sound.`);
+    });
+    field.append(caption, select);
+    selects.appendChild(field);
+  }
+
+  for (const [id, key] of PERSONA_TEXT_HABITS) {
+    $(id).addEventListener("input", () => {
+      if (!state.persona) return;
+      state.persona = normalizePersona({ ...state.persona, [key]: $(id).value });
+      onPersonaChange(false);
+    });
+  }
+
+  const says = $("personaSaysHost");
+  says.replaceChildren();
+  for (const [key, label] of PERSONA_SAYS) {
+    const field = document.createElement("label");
+    field.className = "field";
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 900;
+    input.dataset.say = key;
+    input.addEventListener("input", () => {
+      if (!state.persona) return;
+      state.persona = normalizePersona({ ...state.persona, says: { ...state.persona.says, [key]: input.value } });
+      onPersonaChange(false);
+    });
+    field.append(caption, input);
+    says.appendChild(field);
+  }
+
+  $("randomPersonaBtn").onclick = () => {
+    state.persona = randomPersona();
+    onPersonaChange();
+    const res = personaSampleEngine().reply("hello");
+    speakStudioLine(res.speechText, "", { cues: res.cues, cueWords: res.cueWords });
+  };
+  $("personaGreetingBtn").onclick = () => {
+    const before = state.greeting;
+    for (let attempt = 0; attempt < 5 && state.greeting === before; attempt++) {
+      state.greeting = personaGreeting(state.persona || normalizePersona("friendly"), { name: state.name, role: state.role, company: state.company });
+    }
+    $("botGreetingInput").value = state.greeting;
+    $("auditionText").value = state.greeting;
+    renderPersonaPreview();
+    schedulePreviewSync();
+    speakStudioLine(state.greeting, "wave");
+  };
+}
+
+/** Picks one of the characters as it comes, or none. */
+function choosePersonality(id) {
+  state.persona = id ? normalizePersona({ id }) : null;
+  onPersonaChange();
+  if (state.persona) {
+    const res = personaSampleEngine().reply("hello");
+    speakStudioLine(res.speechText, "", { cues: res.cues, cueWords: res.cueWords });
+  }
+}
+
+/** Every change to the personality goes through here. */
+function onPersonaChange(syncControls = true) {
+  markCustomArchetype();
+  studioAiml.setPersona(state.persona);
+  studioAudio.restMood = state.persona ? state.persona.mood : "";
+  if (!studioAudio.playing) setAvatarMood(studioAnim, studioAudio.restMood);
+  if (syncControls) syncPersonaControls();
+  else {
+    clearTimeout(personaPreviewTimer);
+    personaPreviewTimer = setTimeout(renderPersonaPreview, 160);
+  }
+  schedulePreviewSync();
+}
+
+function syncPersonaControls() {
+  const persona = state.persona;
+  const character = persona ? personalityById(persona.id) : null;
+  for (const btn of $("personaPills").children) {
+    const on = btn.dataset.personaId === (persona ? persona.id : "");
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", String(on));
+  }
+  $("personaBlurb").textContent = character
+    ? `${character.label}: ${character.blurb.toLowerCase()}.`
+    : "No personality: every reply is said exactly as it is written.";
+  $("personaDetails").hidden = !persona;
+  if (persona) {
+    for (const input of document.querySelectorAll("input[data-pe-key]")) {
+      const key = input.dataset.peKey;
+      input.value = persona[key];
+      $(`val_pe_${key}`).textContent = traitWord(key, persona[key]);
+    }
+    for (const [key] of PERSONA_SELECTS) $(`personaSel_${key}`).value = persona[key];
+    $("personaOpenersInput").value = persona.openers.join(" | ");
+    $("personaClosersInput").value = persona.closers.join(" | ");
+    $("personaCatchphraseInput").value = persona.catchphrase;
+    $("personaPetNameInput").value = persona.petName;
+    for (const input of document.querySelectorAll("input[data-say]")) {
+      const key = input.dataset.say;
+      input.value = (persona.says[key] || []).join(" | ");
+      input.placeholder = (character.says[key] || []).join(" | ");
+    }
+  }
+  renderPersonaPreview();
+}
+
+/** A throwaway copy of the bot for showing how lines come out, so the real chat is left alone. */
+function personaSampleEngine(steady = false) {
+  return new AIMLEngine({
+    botProps: studioBotProps(),
+    xml: state.aimlXml,
+    baseXml: state.baseBrain ? BASE_AIML_XML : "",
+    persona: state.persona,
+    random: steady ? () => 0.02 : Math.random,
+  });
+}
+
+/** Shows the same few moments as this bot would say them, each with a button to hear it. */
+function renderPersonaPreview() {
+  const host = $("personaPreviewHost");
+  const rows = [];
+  const fromReply = (label, res) => rows.push({ label, text: res.displayText, play: () => speakStudioLine(res.speechText, "", { cues: res.cues, cueWords: res.cueWords }) });
+  rows.push({ label: "Greeting", text: stripSpeechTags(state.greeting), play: () => speakStudioLine(state.greeting, "wave") });
+  try {
+    const sample = personaSampleEngine(true);
+    fromReply("“Hello”", sample.reply("hello"));
+    const plain = "We're open from nine to five, Monday to Friday.";
+    const answer = state.persona ? stylizeReply(plain, state.persona, { kind: "answer", rng: () => 0.02, memory: {} }) : plain;
+    rows.push({ label: "A plain answer", text: stripSpeechTags(answer), play: () => speakStudioLine(answer) });
+    fromReply("“Thank you”", sample.reply("thank you"));
+    fromReply("Doesn't know", sample.reply("what is a zorbleflux made of"));
+  } catch {
+    // The AIML has an error at the moment; the greeting row is still worth showing.
+  }
+  host.replaceChildren(
+    ...rows.map((row) => {
+      const line = document.createElement("div");
+      line.className = "persona-line";
+      const label = document.createElement("span");
+      label.className = "persona-line-label";
+      label.textContent = row.label;
+      const text = document.createElement("p");
+      text.textContent = row.text;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn xs icon-btn";
+      btn.title = "Hear it";
+      btn.setAttribute("aria-label", `Hear: ${row.label}`);
+      btn.appendChild(iconEl("play"));
+      btn.onclick = row.play;
+      line.append(label, text, btn);
+      return line;
+    })
+  );
 }
 
 // ============================================================================
@@ -1610,6 +1955,9 @@ function rebuildStudioAiml() {
     editor.classList.remove("has-error");
     editor.removeAttribute("aria-invalid");
     studioAiml = info.engine; // the engine the checker just built: your rules over the base brain
+    studioAiml.setPersona(state.persona);
+    studioAudio.restMood = state.persona ? state.persona.mood : "";
+    if (!studioAudio.playing) setAvatarMood(studioAnim, studioAudio.restMood);
     clearTimeout(studioWarmTimer);
     studioWarmTimer = setTimeout(() => studioAiml.warmUp(), 400);
     renderQuickChipBar($("studioChatChips"), studioAiml.quickChips, (q) => askStudioBot(q));
@@ -1681,6 +2029,7 @@ function getFullBotExportConfig() {
     autoGreet: state.embedOpts.autoGreet,
     chatStartOpen: state.embedOpts.chatStartOpen,
     voice: studioVoice ? studioVoice.settings : savedVoiceSettings || { gender: "female", pitchHz: 192, speed: 1.05 },
+    persona: state.persona ? structuredClone(state.persona) : null,
     avatar: structuredClone(state.avatar),
     aimlXml: state.aimlXml,
   };
@@ -1982,6 +2331,9 @@ function populateStaticChoices() {
   }
   for (const item of NECKWEAR_STYLES) {
     $("neckwearSelect").add(new Option(item.label, item.id));
+  }
+  for (const item of BROOCH_STYLES) {
+    $("broochSelect").add(new Option(item.label, item.id));
   }
 
   // Business facts: one field for each thing the base brain can answer about
@@ -2407,6 +2759,26 @@ function bindStudioEvents() {
   bindAv("neckwearColorPicker", "neckwearColor");
   bindAv("fringeCheck", "fringe", true);
   bindAv("beautyMarkCheck", "beautyMark", true);
+  bindAv("noseStudCheck", "noseStud", true);
+  bindAv("broochSelect", "brooch");
+  bindAv("broochColorPicker", "broochColor");
+  // The second eye takes its own color only while the box is ticked.
+  const setSecondEye = () => {
+    state.avatar.irisColor2 = $("oddEyesCheck").checked ? $("irisColor2Picker").value : "";
+    commitAvatarChange();
+  };
+  $("oddEyesCheck").addEventListener("input", setSecondEye);
+  $("irisColor2Picker").addEventListener("input", () => {
+    $("oddEyesCheck").checked = true;
+    setSecondEye();
+  });
+  // A chef's hat starts out white, as chef's hats are.
+  $("headwearSelect").addEventListener("change", (e) => {
+    if (e.target.value === "chef") {
+      state.avatar.headwearColor = "#f4f6fb";
+      commitAvatarChange();
+    }
+  });
   bindAv("eyeshadowColorPicker", "eyeshadowColor");
   bindAv("browColorPicker", "browColor");
   $("browMatchHairBtn").onclick = () => {
@@ -2490,12 +2862,17 @@ function bindStudioEvents() {
   };
 
   // Randomize, save / load config, start over
-  $("randomizeAllBtn").onclick = randomizeEverything;
+  $("randomizeAllBtn").onclick = generateBot;
+  // The generator's menu closes when you click anywhere else.
+  document.addEventListener("pointerdown", (e) => {
+    const menu = $("generatorMenu");
+    if (menu.open && !menu.contains(e.target)) menu.open = false;
+  });
   $("savePresetJsonBtn").onclick = () => {
-    const json = JSON.stringify(getFullBotExportConfig(), null, 2);
+    const json = JSON.stringify({ ...getFullBotExportConfig(), voiceTuning: VOICE_TUNING }, null, 2);
     const fname = `${slugifyBotName(state.name)}-config.json`;
     triggerBrowserDownload(fname, json, "application/json");
-    toast(`Saved ${fname}`);
+    toast(`Downloaded ${fname}`);
   };
   $("loadPresetJsonBtn").onclick = () => $("loadPresetJsonInput").click();
   $("loadPresetJsonInput").onchange = async (e) => {
@@ -2506,14 +2883,16 @@ function bindStudioEvents() {
       const parsed = JSON.parse(await file.text());
       if (!applyConfigObject(parsed)) throw new Error("the file is not a bot configuration");
       if (parsed.voice && typeof parsed.voice === "object") {
-        if (studioVoice) studioVoice.configure(parsed.voice);
-        else savedVoiceSettings = parsed.voice;
+        const voice = retuneSavedVoice(parsed.voice, parsed);
+        if (studioVoice) studioVoice.configure(voice);
+        else savedVoiceSettings = voice;
       }
       syncVoiceControls();
       syncAllAvatarControls();
       syncIdentityControls();
       syncEmbedControls();
       rebuildStudioAiml();
+      syncPersonaControls();
       resetStudioChat();
       schedulePreviewSync(true);
       toast(`Loaded ${state.name} from ${file.name}`);
@@ -2748,6 +3127,7 @@ async function boot() {
   restoreSavedStudio();
 
   populateStaticChoices();
+  buildPersonaControls();
   initHeroSection();
   studioScope = new VoiceScope($("studioScopeCanvas"), ["jaw", "tongue", "lips", "nasal", "voice"], { lanes: true });
   setupDesignerCanvasSculpting();
@@ -2758,6 +3138,7 @@ async function boot() {
   syncIdentityControls();
   syncEmbedControls();
   rebuildStudioAiml();
+  syncPersonaControls();
   resetStudioChat();
   updateEmbedSnippetsUI();
   commitHistory();

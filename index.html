@@ -107,6 +107,8 @@
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.2" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol>
       <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3.5l1.8 4.9 4.9 1.8-4.9 1.8L11 16.9l-1.8-4.9-4.9-1.8 4.9-1.8z"/><path d="M18.5 15v5"/><path d="M16 17.5h5"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9"/><path d="M19 7h1"/><circle cx="16" cy="7" r="2.5"/><path d="M4 17h1"/><path d="M11 17h9"/><circle cx="8" cy="17" r="2.5"/></symbol>
       <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8.5 8.5h.01"/><path d="M15.5 15.5h.01"/><path d="M12 12h.01"/><path d="M15.5 8.5h.01"/><path d="M8.5 15.5h.01"/></symbol>
       <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
@@ -294,8 +296,20 @@
           <p class="section-sub">Pick a starting character, then shape it on the canvas or with the sliders. <span class="autosave-note" id="autosaveNote">Changes are saved in this browser.</span></p>
         </div>
         <div class="section-header-actions">
-          <button type="button" id="randomizeAllBtn" class="btn sm"><svg class="ic"><use href="#i-dice"/></svg>Randomize</button>
-          <button type="button" id="savePresetJsonBtn" class="btn sm" title="Save the full bot configuration as a JSON file"><svg class="ic"><use href="#i-download"/></svg>Save config</button>
+          <div class="generator" id="botGenerator">
+            <button type="button" id="randomizeAllBtn" class="btn sm primary" title="Make a new bot: a name, a look, a voice and a personality"><svg class="ic"><use href="#i-dice"/></svg>Generate a bot</button>
+            <details class="gen-menu" id="generatorMenu">
+              <summary class="btn sm" title="Choose what Generate changes" aria-label="Choose what Generate changes"><svg class="ic"><use href="#i-sliders"/></svg></summary>
+              <div class="gen-menu-panel" role="group" aria-label="What Generate changes">
+                <p class="gen-menu-title">Generate changes</p>
+                <label class="check-field"><input type="checkbox" data-gen="name" checked> <span>Name</span></label>
+                <label class="check-field"><input type="checkbox" data-gen="look" checked> <span>Look</span></label>
+                <label class="check-field"><input type="checkbox" data-gen="voice" checked> <span>Voice</span></label>
+                <label class="check-field"><input type="checkbox" data-gen="persona" checked> <span>Personality and greeting</span></label>
+              </div>
+            </details>
+          </div>
+          <button type="button" id="savePresetJsonBtn" class="btn sm" title="Download this bot (look, voice, personality and chat rules) as a JSON file"><svg class="ic"><use href="#i-download"/></svg>Download config</button>
           <button type="button" id="loadPresetJsonBtn" class="btn sm" title="Load a saved bot configuration JSON file"><svg class="ic"><use href="#i-upload"/></svg>Load config</button>
           <input type="file" id="loadPresetJsonInput" accept=".json,application/json" hidden>
           <button type="button" id="startOverBtn" class="btn sm ghost" title="Discard your changes and go back to Aria"><svg class="ic"><use href="#i-reset"/></svg>Start over</button>
@@ -401,6 +415,7 @@
               <button type="button" class="studio-tab" id="tabBtnFace" data-tab="tabFace" role="tab" aria-selected="false" aria-controls="tabFace" tabindex="-1"><svg class="ic"><use href="#i-face"/></svg>Face</button>
               <button type="button" class="studio-tab" id="tabBtnStyle" data-tab="tabStyle" role="tab" aria-selected="false" aria-controls="tabStyle" tabindex="-1"><svg class="ic"><use href="#i-outfit"/></svg>Hair &amp; outfit</button>
               <button type="button" class="studio-tab" id="tabBtnVoice" data-tab="tabVoice" role="tab" aria-selected="false" aria-controls="tabVoice" tabindex="-1"><svg class="ic"><use href="#i-voice"/></svg>Voice</button>
+              <button type="button" class="studio-tab" id="tabBtnPersona" data-tab="tabPersona" role="tab" aria-selected="false" aria-controls="tabPersona" tabindex="-1"><svg class="ic"><use href="#i-spark"/></svg>Personality</button>
               <button type="button" class="studio-tab" id="tabBtnChat" data-tab="tabChat" role="tab" aria-selected="false" aria-controls="tabChat" tabindex="-1"><svg class="ic"><use href="#i-chat"/></svg>Chat</button>
             </div>
 
@@ -507,6 +522,7 @@
                 <div class="sliders-grid gap-top" id="skinMaterialSlidersHost"></div>
                 <div class="checks-strip gap-top">
                   <label class="check-field"><input type="checkbox" id="beautyMarkCheck"> <span>Beauty mark</span></label>
+                  <label class="check-field"><input type="checkbox" id="noseStudCheck"> <span>Nose stud</span></label>
                 </div>
               </div>
 
@@ -558,6 +574,10 @@
                       <input type="color" id="lipColorPicker" value="#d6687c" aria-label="Custom lip color">
                     </div>
                   </div>
+                </div>
+                <div class="checks-strip gap-bottom">
+                  <label class="check-field"><input type="checkbox" id="oddEyesCheck"> <span>Second eye a different color</span></label>
+                  <input type="color" id="irisColor2Picker" value="#7c5836" aria-label="Color of the second eye">
                 </div>
                 <div class="field-row two-col gap-bottom">
                   <label class="field">
@@ -660,10 +680,18 @@
                     <span>Color</span>
                     <input type="color" id="neckwearColorPicker" value="#d9a441">
                   </label>
+                  <label class="field">
+                    <span>Brooch</span>
+                    <select id="broochSelect"></select>
+                  </label>
+                  <label class="field">
+                    <span>Color</span>
+                    <input type="color" id="broochColorPicker" value="#e6c35c">
+                  </label>
                 </div>
                 <div class="checks-strip gap-top">
                   <label class="check-field"><input type="checkbox" id="headsetMicCheck" checked> <span>Headset mic</span></label>
-                  <label class="check-field"><input type="checkbox" id="nameBadgeCheck" checked> <span>Lapel pin</span></label>
+                  <label class="check-field"><input type="checkbox" id="nameBadgeCheck" checked> <span>Name badge</span></label>
                 </div>
               </div>
             </div>
@@ -705,7 +733,76 @@
               </div>
             </div>
 
-            <!-- TAB 5: CHAT -->
+            <!-- TAB 5: PERSONALITY -->
+            <div class="tab-content" id="tabPersona" role="tabpanel" aria-labelledby="tabBtnPersona" hidden>
+              <div class="control-block">
+                <div class="block-head">
+                  <h3>Character</h3>
+                  <div class="head-actions">
+                    <button type="button" id="randomPersonaBtn" class="btn xs" title="A new personality, keeping the look, voice and name"><svg class="ic"><use href="#i-dice"/></svg>Random personality</button>
+                  </div>
+                </div>
+                <p class="block-note">A personality doesn't change what your bot knows. It changes how the answers come out: the wording, the voice, the laugh, and the little things it tends to say.</p>
+                <div class="pill-grid gap-top" id="personaPills" role="group" aria-label="Personality"></div>
+                <p class="block-note gap-top" id="personaBlurb"></p>
+              </div>
+
+              <div id="personaDetails">
+                <div class="control-block">
+                  <div class="block-head">
+                    <h3>Temperament</h3>
+                  </div>
+                  <div class="sliders-grid" id="personaSlidersHost"></div>
+                </div>
+
+                <div class="control-block">
+                  <div class="block-head">
+                    <h3>Speaking habits</h3>
+                    <span class="hint-text">Separate alternatives with <code>|</code></span>
+                  </div>
+                  <div class="persona-selects" id="personaSelectsHost"></div>
+                  <label class="field gap-top">
+                    <span>Tends to start with</span>
+                    <input type="text" id="personaOpenersInput" placeholder="Sure! | Of course! | Good question." maxlength="700">
+                  </label>
+                  <label class="field gap-top">
+                    <span>Tends to end with</span>
+                    <input type="text" id="personaClosersInput" placeholder="Hope that helps! | Glad you asked." maxlength="700">
+                  </label>
+                  <div class="field-row gap-top">
+                    <label class="field">
+                      <span>Catchphrase</span>
+                      <input type="text" id="personaCatchphraseInput" placeholder="Now and then" maxlength="80">
+                    </label>
+                    <label class="field">
+                      <span>Calls visitors</span>
+                      <input type="text" id="personaPetNameInput" placeholder="friend, mate…" maxlength="24">
+                    </label>
+                  </div>
+                </div>
+
+                <div class="control-block">
+                  <div class="block-head">
+                    <h3>In its own words</h3>
+                    <span class="hint-text">Blank uses the character's own lines</span>
+                  </div>
+                  <div class="says-grid" id="personaSaysHost"></div>
+                  <p class="block-note gap-top">Write <code>{bot}</code> for its name, <code>{company}</code> for yours, and <code>{,user}</code> where the visitor's name fits. Actions such as <code>[wave]</code> and sounds such as <code>[giggle]</code> work here too.</p>
+                </div>
+              </div>
+
+              <div class="control-block">
+                <div class="block-head">
+                  <h3>How it comes out</h3>
+                  <div class="head-actions">
+                    <button type="button" id="personaGreetingBtn" class="btn xs" title="Write a new opening greeting in this personality"><svg class="ic"><use href="#i-refresh"/></svg>New greeting</button>
+                  </div>
+                </div>
+                <div class="persona-preview" id="personaPreviewHost" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <!-- TAB 6: CHAT -->
             <div class="tab-content" id="tabChat" role="tabpanel" aria-labelledby="tabBtnChat" hidden>
               <div class="control-block">
                 <div class="block-head">
@@ -745,7 +842,7 @@
                     <span>Include the base brain</span>
                   </label>
                 </div>
-                <p class="block-note" id="baseBrainInfo">About 360 rules for everyday conversation: greetings, how you feel, questions about the bot, jokes, riddles, trivia, quick games, sums, dates and a little general knowledge. It remembers what a visitor says about themselves while the tab is open. Your own rules always win. Typos, chat shorthand and other ways of saying the same thing (“fees” for “pricing”) are understood.</p>
+                <p class="block-note" id="baseBrainInfo">About 390 rules for everyday conversation: greetings, how you feel, questions about the bot, jokes, riddles, trivia, quick games, sums, dates and a little general knowledge. It remembers what a visitor says about themselves while the tab is open. Your own rules always win. Typos, chat shorthand and other ways of saying the same thing (“fees” for “pricing”) are understood.</p>
               </div>
 
               <div class="control-block">
@@ -985,6 +1082,14 @@
         <details class="faq-item">
           <summary><h3>Can the avatar gesture while it talks?</h3></summary>
           <p>Yes. Write an action such as <code>[wave]</code>, <code>[wink]</code> or <code>[nod]</code> anywhere in a greeting or an answer, and the avatar performs it when the speech reaches that point. The tag itself is never spoken. Voice styles such as <code>[cheerful]</code> or <code>[sad]</code> change the face as well as the voice.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Can I give my bot a personality?</h3></summary>
+          <p>Yes. On the Personality tab, pick a character such as bubbly, calm, witty or grumpy, then adjust how lively, formal, playful and chatty it is. The bot keeps the same answers and says them its own way: its own hello, its own laugh, the things it tends to say first and last, even a catchphrase. Your chat rules are not changed, and “None” says everything exactly as you wrote it.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Can it make up a bot for me?</h3></summary>
+          <p>Yes. “Generate a bot” gives you a new name, look, voice and personality that go together, with a greeting to match. The menu beside it lets you keep any of the four as they are, so you can try new names for a look you like. “Download config” saves the whole bot as one file, and “Load config” brings it back later or on another computer.</p>
         </details>
         <details class="faq-item">
           <summary><h3>Can it laugh, sigh or whisper?</h3></summary>

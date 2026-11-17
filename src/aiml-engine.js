@@ -1,6 +1,8 @@
 // Pure-JS AIML 1.0 / 2.0 XML Pattern-Matching Engine for bot.computer.
 // Zero external dependencies; runs identically in browsers, Shadow DOM embeds, and Node.js.
 
+import { normalizePersona, personaLines, expandPersonaLine, stylizeReply, personaFromXmlNode } from "./persona.js";
+
 const XML_ENTITIES = {
   amp: "&",
   lt: "<",
@@ -466,7 +468,11 @@ function parseActionDuration(part) {
 }
 
 // The voice says a hyphenated word as its parts ("Wi-Fi" is two words, "forty-two" is two).
-const countSpokenWords = (chunk) => chunk.split(/[\s-]+/).filter((tok) => /[A-Za-z0-9]/.test(tok)).length;
+const countSpokenWords = (chunk) =>
+  chunk
+    .split(/[\s-]+/)
+    .filter((tok) => /[A-Za-z0-9]/.test(tok))
+    .reduce((n, tok) => n + (/^[^A-Za-z]*cannot[^A-Za-z]*$/i.test(tok) ? 2 : 1), 0); // the voice says "can not"
 const countSungWords = (chunk) => chunk.split(/\s+/).filter((tok) => /=./.test(tok)).length;
 
 /** Counts words the way cue positions are measured (sung notes count once each). */
@@ -1250,7 +1256,7 @@ function labelFromWords(words) {
 const KNOWN_TEMPLATE_TAGS = new Set(
   ("star thatstar topicstar bot get set think srai sr random li condition uppercase lowercase formal sentence " +
     "person person2 date time size version input that request response br emote gesture reply button chip suggest " +
-    "oob chips map calc explode count daysuntil fallback try name value text postback").split(" ")
+    "oob chips map calc explode count daysuntil fallback try name value text postback persona").split(" ")
 );
 
 // A bot property used in a pattern (`<bot name="company"/>`) that has no value yet.
@@ -1352,11 +1358,65 @@ export class AIMLEngine {
     this._sources = { custom: "", base: "" };
     this._idf = new Map();
     this._answerIds = new Map();
+    // The personality: how replies are worded and delivered (see persona.js). None by default.
+    this.persona = null;
+    this._personaConfig = null; // as given to setPersona()
+    this._personaXml = null; // as written in a <persona> block of your document, which wins
+    this._personaSays = new Map(); // moment -> the personality's own lines, as a <random> node
+    this._personaMemory = {};
+    this.random = typeof options.random === "function" ? options.random : Math.random;
     if (options.baseXml) {
       this.loadBaseXML(options.baseXml);
     }
     if (options.xml) {
       this.loadXML(options.xml);
+    }
+    if (options.persona) this.setPersona(options.persona);
+  }
+
+  /**
+   * Gives the bot a personality, or takes it away with `null`. A personality never changes which
+   * rule answers; it changes how the answer is worded and delivered. Accepts the name of a built-in
+   * character ("bubbly", "grumpy", ...) or an object as described in persona.js.
+   */
+  setPersona(persona) {
+    this._personaConfig = normalizePersona(persona);
+    this.#refreshPersona();
+    return this.persona;
+  }
+
+  #refreshPersona() {
+    const written = this._personaXml;
+    // A document that names a different character starts from that character, not from the one given.
+    const given = written && written.fields.id && this._personaConfig && written.fields.id !== this._personaConfig.id ? {} : this._personaConfig || {};
+    this.persona = written ? normalizePersona({ ...given, ...written.fields }) : this._personaConfig;
+    this._personaSays = new Map();
+    this._personaMemory = {};
+    if (!this.persona) return;
+    for (const [moment, lines] of Object.entries(personaLines(this.persona))) {
+      const node = this.#personaLineNode(lines);
+      if (node) this._personaSays.set(moment, node);
+    }
+    if (written) {
+      for (const [moment, items] of Object.entries(written.says)) {
+        this._personaSays.set(moment, { type: "element", tag: "random", attrs: {}, children: items });
+      }
+    }
+  }
+
+  /** A personality's lines for one moment, as a <random> the template evaluator can run. */
+  #personaLineNode(lines) {
+    const build = (list) => `<random>${list.map((line) => `<li>${line}</li>`).join("")}</random>`;
+    const parse = (xml) => parseXmlDocument(xml).children.find((n) => n.type === "element" && n.tag === "random") || null;
+    try {
+      return parse(build(lines.map(expandPersonaLine)));
+    } catch {
+      try {
+        // A line with a stray "<" or "&" is taken as plain words.
+        return parse(build(lines.map((line) => expandPersonaLine(escapeXml(line)))));
+      } catch {
+        return null;
+      }
     }
   }
 
@@ -1376,6 +1436,8 @@ export class AIMLEngine {
         this._defs.custom = { sets: parsed.sets, maps: parsed.maps };
         this.quickChips = parsed.quickChips;
         this.xmlBotProps = parsed.xmlBotProps;
+        this._personaXml = parsed.persona;
+        this.#refreshPersona();
       }
       this.#rebuildIndex();
     } catch {
@@ -1671,6 +1733,7 @@ export class AIMLEngine {
     const xmlBotProps = {};
     const sets = new Map();
     const maps = new Map();
+    let persona = null;
     this._patternProps = {}; // bot properties that patterns read, with the values they had
 
     const extractCategory = (catNode, topicPattern = "*") => {
@@ -1736,6 +1799,8 @@ export class AIMLEngine {
             late: catNode.attrs.late === "true",
             // firm="true": answers at once, even if a rule about the site might fit more loosely.
             firm: catNode.attrs.firm === "true",
+            // persona="off": said exactly as written, whatever the bot's personality.
+            personaOff: catNode.attrs.persona === "off",
             // An answer that changes each time (a joke, a fact) can be asked for again with "another one".
             varies: /<random\b/i.test(tplSource),
             // A question about one member of a set ("capital of <set>"), with no memory to update, can
@@ -1816,6 +1881,9 @@ export class AIMLEngine {
           }
         }
         maps.set(child.attrs.name.toLowerCase(), { entries, keys: makeWordSet([...entries.keys()]) });
+      } else if (child.tag === "persona") {
+        // The bot's personality, written in the document: <persona id="grumpy" energy="0.2">...</persona>
+        persona = personaFromXmlNode(child, getPlainText);
       } else if (child.tag === "category") {
         extractCategory(child, "*");
       } else if (child.tag === "topic") {
@@ -1830,7 +1898,7 @@ export class AIMLEngine {
 
     const patternProps = this._patternProps;
     this._patternProps = null;
-    return { categories, quickChips, xmlBotProps, sets, maps, patternProps };
+    return { categories, quickChips, xmlBotProps, sets, maps, patternProps, persona };
   }
 
   /**
@@ -1887,6 +1955,8 @@ export class AIMLEngine {
     this._defs.custom = { sets: parsed.sets, maps: parsed.maps };
     this.quickChips = parsed.quickChips;
     this.xmlBotProps = parsed.xmlBotProps;
+    this._personaXml = parsed.persona;
+    this.#refreshPersona();
     this.#rebuildIndex();
     return {
       valid: true,
@@ -2378,6 +2448,10 @@ export class AIMLEngine {
     this.vars.set("dayname", now.toLocaleDateString("en-US", { weekday: "long" }));
     this.vars.set("fallbackstreak", String(this.fallbackStreak));
     this.vars.set("suggestions", this.quickChips.length ? "yes" : "");
+    // The personality, for rules that want to answer differently for a grumpy bot and a bubbly one,
+    // and what it calls a visitor whose name it does not know.
+    this.vars.set("personality", this.persona ? this.persona.id : "");
+    this.vars.set("callsyou", this.persona ? this.persona.petName : "");
     // Bot properties are readable in conditions as bot_<name>, e.g. <condition name="bot_email">.
     for (const [key, value] of Object.entries({ ...this.xmlBotProps, ...this.botProps })) {
       this.vars.set(`bot_${key}`, String(value || this.xmlBotProps?.[key] || "").trim());
@@ -2461,11 +2535,16 @@ export class AIMLEngine {
     // "Speak slower", "whisper from now on": a style the visitor asked for is put in front of every
     // reply until they ask for the normal voice again. It changes the voice, never the text.
     const style = String(this.vars.get("voicestyle") || "").trim().toLowerCase();
-    const parsed = parseSpeechCues(style && VOICE_TAG_WORDS.has(style) ? `[${style}] ${speechRaw}` : speechRaw);
-    const displayText = stripSpeechTags(speechRaw);
-    const sentences = splitSentences(displayText);
-    this.lastBotThat = sentences[sentences.length - 1] || displayText;
-    this.history.push({ user: rawInput, bot: displayText });
+    // The personality has the last word on how it is said. What the engine remembers of the
+    // conversation (<that>, the history) stays as the rules wrote it, so a character that adds
+    // "Easy peasy!" after an answer cannot break a rule that is waiting for that answer.
+    const spoken = this.#inCharacter(speechRaw, { isFallback, first, plans, sideEffects, style });
+    const parsed = parseSpeechCues(style && VOICE_TAG_WORDS.has(style) ? `[${style}] ${spoken}` : spoken);
+    const displayText = stripSpeechTags(spoken);
+    const plainText = stripSpeechTags(speechRaw);
+    const sentences = splitSentences(plainText);
+    this.lastBotThat = sentences[sentences.length - 1] || plainText;
+    this.history.push({ user: rawInput, bot: plainText });
     if (this.history.length > 50) this.history.shift();
     // "Another one" repeats the last thing that was asked for. An answer to the bot's own question
     // ("a clock?" during a riddle) is not something to ask for again.
@@ -2524,7 +2603,33 @@ export class AIMLEngine {
     };
   }
 
+  /** The reply as this bot's personality would say it. */
+  #inCharacter(raw, { isFallback, first, plans, sideEffects, style }) {
+    if (!this.persona || sideEffects.plain) return raw;
+    const category = first ? first.category : null;
+    // A turn in a game, a riddle or any exchange that hangs on the previous line is left as it is.
+    const inContext = plans.some((p) => p.hit.category.that !== "*" || p.hit.category.topic !== "*");
+    const kind = isFallback
+      ? "fallback"
+      : sideEffects.personaSaid
+        ? "says"
+        : inContext
+          ? "context"
+          : category && (category.layer === "custom" || category.requires.length)
+            ? "answer"
+            : "chat";
+    return stylizeReply(raw, this.persona, {
+      kind,
+      gentle: this.vars.get("mood") === "negative" || Boolean(category && category.firm),
+      varied: Boolean(category && category.varies),
+      voicestyle: style,
+      memory: this._personaMemory,
+      rng: this.random,
+    });
+  }
+
   #evalHit(hit, inputText, depth, sideEffects) {
+    if (hit.category.personaOff && sideEffects) sideEffects.plain = true;
     const ctx = {
       input: inputText,
       stars: hit.stars,
@@ -2658,6 +2763,14 @@ export class AIMLEngine {
         this.#evalChildren(node.children, ctx);
         return "";
       }
+      case "persona": {
+        // <persona say="hello">Hi there!</persona>: the personality's own hello if it has one,
+        // otherwise what is written here.
+        const own = this._personaSays.get(String(attrs.say || "").trim().toLowerCase());
+        if (!own) return this.#evalChildren(node.children, ctx);
+        if (ctx.sideEffects) ctx.sideEffects.personaSaid = true;
+        return this.#evalNode(own, ctx);
+      }
       case "srai": {
         const target = this.#evalChildren(node.children, ctx).trim();
         return target ? this.#respondInternal(target, ctx.depth + 1, ctx.sideEffects) : "";
@@ -2684,7 +2797,7 @@ export class AIMLEngine {
         if (!bag || !bag.left.length) {
           const order = items.map((_v, k) => k);
           for (let k = order.length - 1; k > 0; k--) {
-            const j = Math.floor(Math.random() * (k + 1));
+            const j = Math.floor(this.random() * (k + 1));
             [order[k], order[j]] = [order[j], order[k]];
           }
           if (bag && order.length > 1 && order[0] === bag.last) order.push(order.shift());
@@ -2962,11 +3075,11 @@ export const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      <random>
+      <persona say="hello"><random>
         <li>[cheerful] Hi there! I'm <bot name="name"/>, your <bot name="role"/> at <bot name="company"/>. Ask me anything!</li>
         <li>[happy] Welcome! I'm <bot name="name"/>. How can I help guide you around <bot name="company"/> today?</li>
         <li>Hey! Great to meet you. I'm <bot name="name"/> — feel free to ask about features, pricing, or embedding!</li>
-      </random>
+      </random></persona>
       <reply>What can you do?</reply>
       <reply>Pricing &amp; Plans</reply>
       <reply>Self-contained embed</reply>
@@ -3093,7 +3206,7 @@ export const STARTER_AIML_PACKS = {
     <pattern># THANK #</pattern>
     <template>
       <emote>happy</emote>
-      [warmth=0.8] You're very welcome<condition name="username"><li value="">!</li><li>, <get name="username"/>!</li></condition> Let me know if you need anything else.
+      <persona say="thanks">[warmth=0.8] You're very welcome<condition name="username"><li value="">!</li><li>, <get name="username"/>!</li></condition> Let me know if you need anything else.</persona>
     </template>
   </category>
   <category><pattern>THANKS #</pattern><template><srai>THANK</srai></template></category>
@@ -3132,7 +3245,7 @@ export const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      [cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>, your personal shopping guide. Looking for shipping info, sizing, or today's discount?
+      <persona say="hello">[cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>, your personal shopping guide.</persona> Looking for shipping info, sizing, or today's discount?
       <reply>Shipping times</reply>
       <reply>Return policy</reply>
       <reply>Any discount codes?</reply>
@@ -3209,7 +3322,7 @@ export const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      Hey! I'm <bot name="name"/>, digital host for <bot name="company"/>. Ask me about our work, tech stack, or project availability!
+      <persona say="hello">Hey! I'm <bot name="name"/>, digital host for <bot name="company"/>.</persona> Ask me about our work, tech stack, or project availability!
       <reply>About our studio</reply>
       <reply>Tech stack &amp; skills</reply>
       <reply>Are you available?</reply>
@@ -3298,7 +3411,7 @@ export const STARTER_AIML_PACKS = {
 
   <category>
     <pattern>HELLO</pattern>
-    <template>[wave] [cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>. Ask me about the menu, what anything costs, or when we're open.<reply>What's on the menu?</reply><reply>How much is a latte?</reply></template>
+    <template><persona say="hello">[wave] [cheerful] Welcome to <bot name="company"/>! I'm <bot name="name"/>.</persona> Ask me about the menu, what anything costs, or when we're open.<reply>What's on the menu?</reply><reply>How much is a latte?</reply></template>
   </category>
 
   <category>
@@ -3394,7 +3507,7 @@ export const STARTER_AIML_PACKS = {
     <pattern>HELLO</pattern>
     <template>
       <emote>wave</emote>
-      [cheerful] Hello friend! I'm <bot name="name"/>. Tell me your name, ask for a song, or tell me what's on your mind!
+      <persona say="hello">[cheerful] Hello friend! I'm <bot name="name"/>.</persona> Tell me your name, ask for a song, or tell me what's on your mind!
       <reply>How are you feeling?</reply>
       <reply>Sing Twinkle Star</reply>
       <reply>Tell me a riddle</reply>
@@ -3721,7 +3834,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>HELLO</pattern>
     <template>
-      <condition name="username">
+      <persona say="hello"><condition name="username">
         <li value="*"><random>
           <li>[wave] Hi again, <get name="username"/>! What can I do for you?</li>
           <li>[smile] Hello, <get name="username"/>! Good <get name="daypart"/>. How can I help?</li>
@@ -3731,7 +3844,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
           <li>[wave] Hello! Good <get name="daypart"/> to you. What can I do for you?</li>
           <li>[smile] Hey! Nice to see you. What would you like to know?</li>
         </random></li>
-      </condition>
+      </condition></persona>
     </template>
   </category>
   <category>
@@ -3792,11 +3905,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>HOW ARE YOU</pattern>
     <template>
-      <random>
-        <li>[smile] I'm doing great, thanks for asking! How about you?</li>
-        <li>All good on my side of the screen. [smile] How about you?</li>
-        <li>[smile] Pretty well, thank you! How about you?</li>
-      </random>
+      <persona say="howareyou"><random>
+        <li>[smile] I'm doing great, thanks for asking!</li>
+        <li>All good on my side of the screen. [smile]</li>
+        <li>[smile] Pretty well, thank you!</li>
+      </random></persona> How about you?
     </template>
   </category>
   <category>
@@ -3939,11 +4052,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>THANKS # | THANK YOU # | THANK #</pattern>
     <template>
-      <random>
+      <persona say="thanks"><random>
         <li>[smile] You're welcome<condition name="username"><li value="*">, <get name="username"/></li></condition>!</li>
         <li>[nod] Happy to help! Anything else I can help with?</li>
         <li>My pleasure! [smile]</li>
-      </random>
+      </random></persona>
     </template>
   </category>
   <category>
@@ -3961,11 +4074,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>BYE</pattern>
     <template>
-      <random>
+      <persona say="bye"><random>
         <li>[wave] Goodbye<condition name="username"><li value="*">, <get name="username"/></li></condition>! Come back any time.</li>
         <li>[wave] Bye for now! It was nice chatting.</li>
         <li>See you later! [wave]</li>
-      </random>
+      </random></persona>
     </template>
   </category>
   <category>
@@ -3992,7 +4105,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <!-- ============================== Who the bot is ============================== -->
   <category>
     <pattern>WHO ARE YOU</pattern>
-    <template>I'm <bot name="name"/>, the <bot name="role"/> here at <bot name="company"/>. [smile] Ask me anything!</template>
+    <template><persona say="whoareyou">I'm <bot name="name"/>, the <bot name="role"/> here at <bot name="company"/>. [smile] Ask me anything!</persona></template>
+  </category>
+  <category>
+    <pattern>WHAT IS YOUR PERSONALITY # | WHAT IS YOUR PERSONALITY LIKE | DESCRIBE YOUR PERSONALITY # | TELL ME ABOUT YOUR PERSONALITY | WHAT ARE YOU LIKE | WHAT ARE YOU LIKE AS A PERSON | WHAT KIND OF PERSON ARE YOU | WHAT SORT OF PERSON ARE YOU | HOW WOULD YOU DESCRIBE YOURSELF | HOW WOULD YOUR FRIENDS DESCRIBE YOU | DO YOU HAVE A PERSONALITY | WHAT IS YOUR CHARACTER LIKE | WHAT IS YOUR TEMPERAMENT</pattern>
+    <template><persona say="describe">Helpful and curious, I'd say. [smile] And always up for a chat.</persona></template>
   </category>
   <category>
     <pattern>WHAT IS YOUR NAME | YOUR NAME | WHAT ARE YOU CALLED | WHAT SHOULD I CALL YOU | WHAT DO I CALL YOU | INTRODUCE YOURSELF | TELL ME ABOUT YOURSELF | WHO IS THIS | WHO AM I TALKING TO | WHO AM I SPEAKING TO | WHO AM I SPEAKING WITH | WHO AM I TALKING WITH | WHO AM I CHATTING WITH | WHO IS THERE THEN | DO YOU HAVE A NAME | WHO ARE YOU EXACTLY | AND YOU ARE | WHAT IS YOUR NAME AGAIN</pattern>
@@ -4071,7 +4188,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>WHAT LANGUAGE DO YOU SPEAK | WHAT LANGUAGES DO YOU SPEAK | DO YOU SPEAK * | CAN YOU SPEAK * | DO YOU KNOW ANY OTHER LANGUAGES | HOW MANY LANGUAGES DO YOU SPEAK</pattern>
     <template>I speak English for now.</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * IN <set>language</set> | HOW DO YOU SAY * IN <set>language</set> | WHAT IS * IN <set>language</set> | SPEAK <set>language</set> | # IN <set>language</set> PLEASE | TALK IN <set>language</set> | SPEAK IN <set>language</set> | SAY SOMETHING IN <set>language</set></pattern>
     <template>I only speak English, I'm afraid. [shrug] It's the one language my voice was built for.</template>
   </category>
@@ -4451,11 +4568,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </category>
   <category>
     <pattern>LOL | HAHA | HAHAHA | HEHE | HA | HA HA | LMAO | ROFL | FUNNY | THAT IS FUNNY # | THAT WAS FUNNY # | GOOD ONE | NICE ONE | THAT IS A GOOD ONE | THAT WAS A GOOD ONE | I LIKE THAT ONE | LOVE IT | CLASSIC | HILARIOUS | THAT IS HILARIOUS # | YOU MADE ME LAUGH # | I AM LAUGHING #</pattern>
-    <template><random>
+    <template><persona say="laugh"><random>
       <li>[laugh] Glad I could make you smile!</li>
       <li>[chuckle] I'm glad you liked that.</li>
       <li>[giggle] That one got me too.</li>
-    </random></template>
+    </random></persona></template>
   </category>
   <category>
     <pattern>THAT WAS A BAD JOKE # | BAD JOKE | NOT FUNNY | THAT IS NOT FUNNY # | THAT WAS NOT FUNNY # | TERRIBLE JOKE | LAME | THAT WAS LAME # | THAT WAS TERRIBLE # | THAT JOKE WAS BAD # | THAT WAS AWFUL #</pattern>
@@ -4534,7 +4651,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
       </condition>
     </template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHAT | PARDON | SORRY WHAT | EXCUSE ME | COME AGAIN | HUH | SAY THAT AGAIN # | REPEAT | REPEAT THAT # | CAN YOU REPEAT THAT # | WHAT DID YOU SAY # | SAY AGAIN | ONE MORE TIME | WHAT WAS THAT | I DID NOT CATCH THAT | I MISSED THAT | CAN YOU SAY THAT AGAIN #</pattern>
     <template>Sure. <response index="1" default="I haven't said anything yet!"/></template>
   </category>
@@ -4568,10 +4685,10 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>YOU ARE # <set>praise</set> # | YOU SEEM # <set>praise</set> # | YOU SOUND # <set>praise</set> # | YOU LOOK # <set>praise</set> # | YOU ARE NOT # <set>insult</set> # | I THINK YOU ARE # <set>praise</set> #</pattern>
     <template>
-      <random>
+      <persona say="praise"><random>
         <li>[aww] That's very kind of you, thank you!</li>
         <li>[wink] You're not so bad yourself!</li>
-      </random>
+      </random></persona>
     </template>
   </category>
   <category>
@@ -4996,11 +5113,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <!-- ============================== Sounds on request ==============================
        Each key of the soundtag table is something a visitor can ask for: "yawn", "can you
        whistle", "do an evil laugh". -->
-  <category>
+  <category persona="off">
     <pattern><set>soundtag</set> | <set>soundtag</set> FOR ME | <set>soundtag</set> PLEASE | DO A <set>soundtag</set> # | DO AN <set>soundtag</set> # | GIVE ME A <set>soundtag</set> # | GIVE ME AN <set>soundtag</set> # | LET ME HEAR YOU <set>soundtag</set> # | LET ME HEAR A <set>soundtag</set> # | MAKE A <set>soundtag</set> SOUND # | MAKE A <set>soundtag</set> NOISE # | I WANT TO HEAR YOU <set>soundtag</set> #</pattern>
     <template><map name="soundtag"><star/></map></template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHAT SOUNDS CAN YOU MAKE # | WHAT NOISES CAN YOU MAKE # | MAKE A SOUND | MAKE A NOISE | MAKE SOME NOISE | SOUND EFFECTS | DO A SOUND EFFECT | CAN YOU MAKE SOUNDS | CAN YOU MAKE NOISES | MAKE A FUNNY NOISE | MAKE A FUNNY SOUND | WHAT OTHER SOUNDS CAN YOU MAKE</pattern>
     <template>Plenty! I can laugh, [laugh] sigh, [sigh] whistle, [whistle] and even sneeze. [sneeze] Excuse me!<reply>Evil laugh</reply><reply>Yawn</reply><reply>Hiccup</reply><reply>Hum</reply></template>
   </category>
@@ -5008,7 +5125,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>ARE YOU ASLEEP | WAKE UP | ARE YOU SLEEPING | ARE YOU AWAKE YET | DID YOU FALL ASLEEP | HELLO WAKE UP</pattern>
     <template>[snore] [pause=250ms] Oh! [gasp] I'm awake, I'm awake. What did I miss?</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>HUM A TUNE # | HUM SOMETHING # | HUM FOR ME # | CAN YOU HUM # | HUM A SONG #</pattern>
     <template>[hum] [hum length=1.4] [smile] That's my thinking tune.</template>
   </category>
@@ -5052,51 +5169,51 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>WHISPER | CAN YOU WHISPER | WHISPER SOMETHING # | WHISPER TO ME # | DO YOU WHISPER</pattern>
     <template>[whisper] Like this? [pause=200ms] I can keep it down when I need to. [/whisper] [smile] And back again.</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHISPER *</pattern>
     <template>[whisper] <sentence><star/></sentence>. [/whisper]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SHOUT * | YELL * | SAY * LOUDLY | SAY * LOUDER | SAY * OUT LOUD</pattern>
     <template>[louder] <sentence><star/></sentence>! [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * SLOWLY | SAY * VERY SLOWLY | SAY * MORE SLOWLY</pattern>
     <template>[slow] <sentence><star/></sentence>. [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * QUICKLY | SAY * FAST | SAY * REALLY FAST | SAY * AS FAST AS YOU CAN</pattern>
     <template>[fast] <sentence><star/></sentence>. [reset] [phew]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * SADLY | SAY * IN A SAD VOICE</pattern>
     <template>[sad] <sentence><star/></sentence>. [sigh] [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * HAPPILY | SAY * CHEERFULLY | SAY * EXCITEDLY | SAY * IN A HAPPY VOICE</pattern>
     <template>[excited] <sentence><star/></sentence>! [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * WHILE LAUGHING | SAY * LAUGHING | LAUGH AND SAY * | SAY * AND LAUGH | SAY * WITH A LAUGH</pattern>
     <template>[laughing] <sentence><star/></sentence>! [/laughing]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY * IN A DEEP VOICE | SAY * IN A LOW VOICE | SAY * DEEPLY</pattern>
     <template>[deep] <sentence><star/></sentence>. [/voice] [smile]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY THAT AGAIN SLOWLY # | SAY IT SLOWLY # | REPEAT THAT SLOWLY # | SAY THAT SLOWER # | SAY THAT MORE SLOWLY # | AGAIN BUT SLOWER # | CAN YOU SAY THAT SLOWER # | ONE MORE TIME SLOWLY #</pattern>
     <template>[slow] <response index="1" default="I haven't said anything yet!"/> [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SAY THAT LOUDER # | SAY IT LOUDER # | REPEAT THAT LOUDER # | SAY THAT AGAIN LOUDER # | I DID NOT HEAR THAT # | I COULD NOT HEAR THAT # | CAN YOU SAY THAT LOUDER #</pattern>
     <template>[louder] <response index="1" default="I haven't said anything yet!"/> [reset]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>WHISPER THAT # | WHISPER IT # | SAY THAT QUIETLY # | SAY IT QUIETLY # | SAY THAT IN A WHISPER #</pattern>
     <template>[whisper] <response index="1" default="I haven't said anything yet!"/> [/whisper]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>DO AN IMPRESSION # | DO IMPRESSIONS # | CAN YOU DO IMPRESSIONS # | DO A VOICE # | DO A DIFFERENT VOICE # | CHANGE YOUR VOICE # | DO A FUNNY VOICE # | CAN YOU CHANGE YOUR VOICE # | DO ANOTHER VOICE #</pattern>
     <template>[deep] How about this one? [/voice] [bright] Or this one? [/voice] [husky] Or maybe this? [/voice] [chuckle] I think I'll stay with my own.</template>
   </category>
@@ -5152,7 +5269,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>CAN YOU COUNT | COUNT | COUNT FOR ME</pattern>
     <template>[nod] <count>10</count>. [smile]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>SPELL * | HOW DO YOU SPELL * | CAN YOU SPELL * | HOW IS * SPELLED | HOW IS * SPELT</pattern>
     <template>[think] <uppercase><explode sep=", "><star/></explode></uppercase>.</template>
   </category>
@@ -5160,11 +5277,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>SAY THE ALPHABET | RECITE THE ALPHABET | DO YOU KNOW THE ALPHABET | SING THE ALPHABET | ABC | DO YOU KNOW YOUR ABC</pattern>
     <template>A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z. [smile]</template>
   </category>
-  <category>
+  <category persona="off">
     <pattern>REPEAT AFTER ME * | CAN YOU SAY *</pattern>
     <template><sentence><star/></sentence>. [smile]</template>
   </category>
-  <category late="true">
+  <category late="true" persona="off">
     <pattern>SAY *</pattern>
     <template><sentence><star/></sentence>. [smile]</template>
   </category>
@@ -5748,11 +5865,11 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
             <li>[shrug] I'm still not able to help with that one, sorry. Is there something else I can do?</li>
           </condition></li>
           <li value="question"><condition name="fallbackstreak">
-            <li value="1"><random>
+            <li value="1"><persona say="unsure"><random>
               <li>[hmm] Good question. I don't know that one, I'm afraid.</li>
               <li>I wish I knew! [shrug] That's outside what I've been taught.</li>
               <li>[think] Hmm, that one's beyond me. Could you put it another way?</li>
-            </random></li>
+            </random></persona></li>
             <li name="suggestions" value="yes"><random>
               <li>[shrug] I don't know that one either, I'm afraid. Here are some things I can help with.</li>
               <li>That's beyond me too, sorry. [think] Maybe one of these is what you're after?</li>
@@ -5775,14 +5892,14 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
             </random></li>
             <li><condition name="fallbackstreak">
               <li value="3">[smile] I'm enjoying this, even if I can't keep up with all of it. I'm at my best with questions about <bot name="company"/>, jokes, riddles and sums.</li>
-              <li><random>
+              <li><persona say="listen"><random>
                 <li>[mhm] I see. Tell me more?</li>
                 <li>Interesting! [think] What makes you say that?</li>
                 <li>[nod] Got it. Go on, I'm listening.</li>
                 <li>[hmm] I'm not sure what to say to that, but I'm listening.</li>
                 <li>[nod] Okay. And then?</li>
                 <li>That's new to me. [smile] What else is on your mind?</li>
-              </random></li>
+              </random></persona></li>
             </condition></li>
           </condition></li>
         </condition></li>

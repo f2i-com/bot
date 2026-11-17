@@ -27,6 +27,9 @@ export const HAIR_STYLES = [
   { id: "ponytail", label: "Ponytail" },
   { id: "afro", label: "Afro" },
   { id: "braids", label: "Twin Braids" },
+  { id: "pigtails", label: "Pigtails" },
+  { id: "space_buns", label: "Space Buns" },
+  { id: "mohawk", label: "Mohawk" },
   { id: "buzz", label: "Clean Buzz Fade" },
   { id: "none", label: "Smooth / Bald" },
 ];
@@ -41,6 +44,10 @@ export const OUTFIT_STYLES = [
   { id: "polo", label: "Polo Shirt" },
   { id: "scoop", label: "Scoop-Neck Top" },
   { id: "apron", label: "Barista Apron" },
+  { id: "tee", label: "Graphic Tee" },
+  { id: "shirt", label: "Button-Up Shirt" },
+  { id: "cardigan", label: "Cozy Cardigan" },
+  { id: "jacket", label: "Zip Jacket" },
   { id: "cyber", label: "Android Chassis" },
 ];
 
@@ -85,6 +92,11 @@ export const HEADWEAR_STYLES = [
   { id: "beret", label: "Beret" },
   { id: "headphones", label: "Headphones" },
   { id: "headscarf", label: "Headscarf" },
+  { id: "bow", label: "Hair Bow" },
+  { id: "flower", label: "Flower" },
+  { id: "tiara", label: "Tiara" },
+  { id: "fedora", label: "Fedora" },
+  { id: "chef", label: "Chef's Hat" },
 ];
 
 export const NECKWEAR_STYLES = [
@@ -93,6 +105,14 @@ export const NECKWEAR_STYLES = [
   { id: "bowtie", label: "Bow Tie" },
   { id: "scarf", label: "Scarf" },
   { id: "lanyard", label: "Lanyard & ID Badge" },
+];
+
+export const BROOCH_STYLES = [
+  { id: "none", label: "None" },
+  { id: "round", label: "Round Pin" },
+  { id: "star", label: "Star" },
+  { id: "heart", label: "Heart" },
+  { id: "flower", label: "Flower" },
 ];
 
 /** Gestures and expressions that can be triggered directly or written inline as `[wave]`, `[wink]`, ... */
@@ -199,11 +219,18 @@ export const DEFAULT_AVATAR = {
   fringe: false, // straight bangs across the forehead
   ageLines: 0.0, // 0 .. 1 (laugh lines, crow's feet, forehead lines)
   beautyMark: false,
+  dimples: 0.0, // 0 .. 1
+  eyeliner: 0.0, // 0 .. 1 (a winged line at the outer corner of each eye)
+  noseStud: false, // a small stud in the earring metal
+  irisColor2: "", // "" = both eyes the same; otherwise the colour of the second eye
+  brooch: "none", // "none" | "round" | "star" | "heart" | "flower"
+  broochColor: "#e6c35c",
 };
 
 export const AVATAR_PRESETS = [
   {
     id: "aria",
+    persona: "friendly",
     name: "Aria",
     role: "Website Concierge",
     tagline: "Classic SitePal hostess with headset & warm soprano voice",
@@ -214,6 +241,7 @@ export const AVATAR_PRESETS = [
   },
   {
     id: "marcus",
+    persona: "professional",
     name: "Marcus",
     role: "Executive Advisor",
     tagline: "Broad-shouldered tailored suit & confident baritone",
@@ -264,6 +292,7 @@ export const AVATAR_PRESETS = [
   },
   {
     id: "chloe",
+    persona: "bubbly",
     name: "Chloe",
     role: "Product Support",
     tagline: "Friendly studio sweater, round frames & lively voice",
@@ -302,6 +331,7 @@ export const AVATAR_PRESETS = [
   },
   {
     id: "viktor",
+    persona: "calm",
     name: "Viktor",
     role: "Solutions Architect",
     tagline: "Minimalist turtleneck, sculpted beard & resonant voice",
@@ -344,6 +374,7 @@ export const AVATAR_PRESETS = [
   },
   {
     id: "nova",
+    persona: "witty",
     name: "Nova-7",
     role: "Cybernetic Companion",
     tagline: "Synth-porcelain android chassis, holo visor & crisp vocal tract",
@@ -381,6 +412,7 @@ export const AVATAR_PRESETS = [
   },
   {
     id: "arthur",
+    persona: "curious",
     name: "Prof. Arthur",
     role: "Knowledge Curator",
     tagline: "Distinguished scholar with classic mustache & warm timbre",
@@ -1353,7 +1385,7 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
 
   // A beanie or cap covers the top of the head, so hair above its edge must not be drawn.
   const headwear = avatar.headwear || "none";
-  const hatOn = headwear === "beanie" || headwear === "cap" || headwear === "beret";
+  const hatOn = headwear === "beanie" || headwear === "cap" || headwear === "beret" || headwear === "fedora" || headwear === "chef";
   const hatLine = -m.headH * 0.56 - 5;
   const clipBelowHat = () => {
     if (!hatOn) return;
@@ -1412,6 +1444,36 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     ctx.bezierCurveTo(m.headW + 12 + sway * 0.6, 26, m.headW + 6, -6, m.headW * 0.2, tailTop + 14);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+  }
+  if (avatar.hairStyle === "pigtails") {
+    // Two bunches tied at the sides, falling behind the shoulders.
+    ctx.save();
+    ctx.translate(-yawX * 0.42, nodY * 0.65);
+    ctx.rotate(headTilt * 0.55);
+    clipBelowHat();
+    const sway = Math.sin(timeSec * 1.6) * 1.4 + xv("shake") * Math.sin(timeSec * 13 - 0.6) * 4;
+    const tieY = 4;
+    const endY = m.shoulderY + 30;
+    for (const dir of [-1, 1]) {
+      const x0 = dir * (m.headW - 3);
+      const tailGrad = ctx.createLinearGradient(0, tieY - 10, 0, endY);
+      tailGrad.addColorStop(0, rgbStr(shadeRgb(hairRgb, 1.02)));
+      tailGrad.addColorStop(1, rgbStr(shadeRgb(hairRgb, 0.58)));
+      ctx.fillStyle = tailGrad;
+      ctx.beginPath();
+      ctx.moveTo(x0, tieY - 12);
+      ctx.bezierCurveTo(x0 + dir * 34, tieY - 12, x0 + dir * 40 + sway, endY - 36, x0 + dir * 24 + sway, endY - 6);
+      ctx.quadraticCurveTo(x0 + dir * 15 + sway, endY + 7, x0 + dir * 6 + sway, endY - 8);
+      ctx.bezierCurveTo(x0 + dir * 12, endY - 40, x0 + dir * 5, tieY + 24, x0 - dir * 3, tieY + 10);
+      ctx.closePath();
+      ctx.fill();
+      // the tie that gathers each bunch
+      ctx.fillStyle = rgbStr(outAccRgb);
+      ctx.beginPath();
+      ctx.ellipse(x0 + dir * 12.5, tieY + 3, 4.4, 7, dir * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
   if (avatar.hairStyle === "long_waves" || avatar.hairStyle === "shoulder_lob" || avatar.hairStyle === "sleek_bob" || avatar.hairStyle === "long_straight" || avatar.hairStyle === "braids" || isHalo) {
@@ -1836,6 +1898,141 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     ctx.beginPath();
     ctx.roundRect(-13, bibTop + 14, 26, 4, 2);
     ctx.fill();
+  } else if (outfit === "tee") {
+    // Crew-neck T-shirt with a ribbed collar and a round print on the chest
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.quadraticCurveTo(0, sy + 15, m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 0.78));
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 2, sy - 2);
+    ctx.quadraticCurveTo(0, sy + 17, m.neckHalfW + 2, sy - 2);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outAccRgb, 0.94);
+    ctx.beginPath();
+    ctx.arc(0, sy + 50, 10.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = rgbStr(outSecRgb, 0.92);
+    ctx.beginPath();
+    ctx.arc(0, sy + 50, 4.6, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (outfit === "shirt") {
+    // Open-collar shirt: buttons down the front under two collar points, and a chest pocket
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.lineTo(0, sy + 20);
+    ctx.lineTo(m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 0.68), 0.75);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, sy + 20);
+    ctx.lineTo(0, hipY);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outSecRgb);
+    for (let by = sy + 32; by < hipY - 4; by += 15) {
+      ctx.beginPath();
+      ctx.arc(0, by, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 0.68), 0.65);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(-m.chestHalfW * 0.66, sy + 40, 15, 16, 2);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(shadeRgb(outPriRgb, 1.22));
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.18)";
+    ctx.lineWidth = 0.9;
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(dir * (m.neckHalfW + 2), sy - 6);
+      ctx.lineTo(dir * (m.neckHalfW + 15), sy + 12);
+      ctx.lineTo(dir * 4, sy + 25);
+      ctx.lineTo(0, sy + 19);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (outfit === "cardigan") {
+    // An open cardigan over a top: a deep V edged with a ribbed band, and buttons below it
+    const vBottom = sy + 62;
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.quadraticCurveTo(0, sy + 14, m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = rgbStr(outSecRgb);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 4, sy - 2);
+    ctx.lineTo(0, vBottom);
+    ctx.lineTo(m.neckHalfW + 4, sy - 2);
+    ctx.quadraticCurveTo(0, sy + 15, -m.neckHalfW - 4, sy - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgbStr(shadeRgb(outPriRgb, 1.3));
+    ctx.lineWidth = 5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 5, sy - 3);
+    ctx.lineTo(0, vBottom);
+    ctx.lineTo(m.neckHalfW + 5, sy - 3);
+    ctx.moveTo(0, vBottom);
+    ctx.lineTo(0, hipY);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outAccRgb);
+    for (let by = vBottom + 13; by < hipY - 4; by += 16) {
+      ctx.beginPath();
+      ctx.arc(0, by, 2.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (outfit === "jacket") {
+    // Zip-up jacket: a stand collar, the top underneath showing at the neck, a zip down the middle
+    ctx.fillStyle = rgbStr(skinMid);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW + 1, sy - 4);
+    ctx.quadraticCurveTo(0, sy + 14, m.neckHalfW - 1, sy - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = rgbStr(outSecRgb);
+    ctx.beginPath();
+    ctx.moveTo(-m.neckHalfW - 2, sy - 2);
+    ctx.lineTo(0, sy + 32);
+    ctx.lineTo(m.neckHalfW + 2, sy - 2);
+    ctx.quadraticCurveTo(0, sy + 14, -m.neckHalfW - 2, sy - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = rgbStr(shadeRgb(outPriRgb, 1.22));
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.16)";
+    ctx.lineWidth = 0.9;
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(dir * (m.neckHalfW + 3), sy - 10);
+      ctx.quadraticCurveTo(dir * (m.neckHalfW + 16), sy - 2, dir * (m.neckHalfW + 13), sy + 11);
+      ctx.lineTo(0, sy + 33);
+      ctx.lineTo(dir * (m.neckHalfW - 1), sy + 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.strokeStyle = rgbStr(outAccRgb, 0.95);
+    ctx.lineWidth = 2;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.moveTo(0, sy + 33);
+    ctx.lineTo(0, hipY);
+    ctx.stroke();
+    ctx.fillStyle = rgbStr(outAccRgb);
+    ctx.beginPath();
+    ctx.roundRect(-2.8, sy + 31, 5.6, 9.5, 1.8);
+    ctx.fill();
   } else if (outfit === "cyber") {
     // Glowing chest arc / synth telemetry lines
     ctx.strokeStyle = rgbStr(outAccRgb, 0.75);
@@ -1862,6 +2059,44 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     ctx.fillStyle = rgbStr(outAccRgb);
     ctx.beginPath();
     ctx.roundRect(m.chestHalfW * 0.36, sy + 24, 15, 5.5, 2.5);
+    ctx.fill();
+  }
+
+  // A brooch on the other side of the chest
+  const brooch = avatar.brooch || "none";
+  if (brooch !== "none" && outfit !== "cyber") {
+    const pinRgb = parseHex(avatar.broochColor, [230, 195, 92]);
+    const bx = -m.chestHalfW * 0.4;
+    const by = sy + 29;
+    ctx.fillStyle = rgbStr(pinRgb);
+    ctx.strokeStyle = rgbStr(shadeRgb(pinRgb, 0.62), 0.8);
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    if (brooch === "star") {
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 ? 2.9 : 6.6;
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        ctx[i ? "lineTo" : "moveTo"](bx + Math.cos(a) * r, by + Math.sin(a) * r);
+      }
+      ctx.closePath();
+    } else if (brooch === "heart") {
+      ctx.moveTo(bx, by + 5.8);
+      ctx.bezierCurveTo(bx - 9.5, by - 0.5, bx - 4.4, by - 7.6, bx, by - 2.6);
+      ctx.bezierCurveTo(bx + 4.4, by - 7.6, bx + 9.5, by - 0.5, bx, by + 5.8);
+    } else if (brooch === "flower") {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        ctx.moveTo(bx + Math.cos(a) * 3.9 + 3, by + Math.sin(a) * 3.9);
+        ctx.arc(bx + Math.cos(a) * 3.9, by + Math.sin(a) * 3.9, 3, 0, Math.PI * 2);
+      }
+    } else {
+      ctx.arc(bx, by, 4.8, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = brooch === "flower" ? rgbStr(shadeRgb(pinRgb, 0.6)) : "rgba(255, 255, 255, 0.55)";
+    ctx.beginPath();
+    ctx.arc(brooch === "flower" ? bx : bx - 1.4, brooch === "flower" ? by : by - 1.6, brooch === "flower" ? 2.2 : 1.2, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -2007,7 +2242,7 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
   ctx.rotate(headTilt);
 
   // Back crown hair for shorter masculine/cropped styles
-  if (avatar.hairStyle === "side_sweep" || avatar.hairStyle === "quiff" || avatar.hairStyle === "pixie" || avatar.hairStyle === "buzz" || avatar.hairStyle === "updo_bun" || avatar.hairStyle === "ponytail") {
+  if (["side_sweep", "quiff", "pixie", "buzz", "updo_bun", "ponytail", "pigtails", "space_buns", "mohawk"].includes(avatar.hairStyle)) {
     const chGrad = ctx.createLinearGradient(0, -m.headH - 28, 0, 18);
     chGrad.addColorStop(0, rgbStr(shadeRgb(hairRgb, 1.15)));
     chGrad.addColorStop(1, rgbStr(shadeRgb(hairRgb, 0.62)));
@@ -2021,7 +2256,15 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
       ctx.fill();
     }
 
-    const pad = avatar.hairStyle === "buzz" ? 2.2 : 5.5;
+    if (avatar.hairStyle === "space_buns") {
+      for (const dir of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(dir * m.headW * 0.7 - yawX * 0.35, -m.headH - 8, 15 * m.headScale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    const pad = avatar.hairStyle === "buzz" || avatar.hairStyle === "mohawk" ? 2.2 : 5.5;
     ctx.beginPath();
     ctx.moveTo(-m.headW - pad, -10);
     ctx.bezierCurveTo(-m.headW - pad - 4, -m.headH - 14, m.headW + pad + 4, -m.headH - 14, m.headW + pad, -10);
@@ -2249,7 +2492,9 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
   const browLift = clamp(anim.pitchSt * 0.85 + anim.energy * 2.4 + xv("browUp") * 5.2, -2.5, 8.5);
   const shadowAmt = clamp(avatar.eyeshadow ?? 0, 0, 1);
   const shadowRgb = parseHex(avatar.eyeshadowColor, [122, 92, 143]);
-  const irisRgb = parseHex(avatar.irisColor, [59, 130, 166]);
+  const irisFirstRgb = parseHex(avatar.irisColor, [59, 130, 166]);
+  const irisSecondRgb = avatar.irisColor2 ? parseHex(avatar.irisColor2, irisFirstRgb) : irisFirstRgb;
+  const linerAmt = clamp(avatar.eyeliner ?? 0, 0, 1);
 
   for (const dir of [-1, 1]) {
     const ex = dir * eyeSpan;
@@ -2259,6 +2504,7 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     const openH = Math.max(0.55, 6.2 * eyeSc * (1 + eyeWide * 0.34) * (1 - blinkAmt * 0.94));
     const ew = 11.4 * eyeSc;
     const outerLift = -tilt * 5.5;
+    const irisRgb = dir === 1 ? irisSecondRgb : irisFirstRgb;
 
     // Orbital socket shading
     const sockGrad = ctx.createRadialGradient(ex, ey - 1, 2, ex, ey - 1, 15 * eyeSc);
@@ -2352,6 +2598,16 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     );
     ctx.stroke();
 
+    // Eyeliner: the lash line carried out past the corner of the eye in a small wing
+    if (linerAmt > 0.02) {
+      ctx.strokeStyle = `rgba(23, 20, 31, ${0.6 + linerAmt * 0.4})`;
+      ctx.lineWidth = (1.2 + linerAmt * 1.5) * Math.sqrt(eyeSc);
+      ctx.beginPath();
+      ctx.moveTo(ex + dir * (ew - 3), ey - 0.6 + outerLift * 0.8);
+      ctx.quadraticCurveTo(ex + dir * (ew + 1.5), ey - 0.2 + outerLift, ex + dir * (ew + 2.6 + linerAmt * 3.6), ey - 1.4 - linerAmt * 3 + outerLift);
+      ctx.stroke();
+    }
+
     // Sculpted, tapered eyebrow
     const browSc = clamp(avatar.browThickness ?? 1, 0.5, 1.65);
     const arch = clamp(avatar.browArch ?? 0.2, -0.2, 0.6) * 10;
@@ -2400,6 +2656,18 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
   for (const dir of [-1, 1]) {
     ctx.beginPath();
     ctx.ellipse(dir * 4.5 * noseW, tipY + 1.1, 2.2 * noseW, 1.1, dir * -0.28, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (avatar.noseStud) {
+    const studRgb = parseHex(avatar.earringColor, [230, 195, 92]);
+    ctx.fillStyle = rgbStr(studRgb);
+    ctx.beginPath();
+    ctx.arc(7.4 * noseW, tipY - 2.2, 1.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+    ctx.beginPath();
+    ctx.arc(7.0 * noseW, tipY - 2.6, 0.5, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -2549,6 +2817,21 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     ctx.fill();
   }
 
+  // Dimples: a small crease beside each corner of the mouth, deeper in a smile
+  const dimpleAmt = clamp(avatar.dimples ?? 0, 0, 1);
+  if (dimpleAmt > 0.02) {
+    ctx.strokeStyle = rgbStr(skinDeep, (0.18 + dimpleAmt * 0.34) * clamp(0.65 + smileLift * 0.1, 0.6, 1.25));
+    ctx.lineWidth = 1.3;
+    ctx.lineCap = "round";
+    for (const dir of [-1, 1]) {
+      const dx = dir * (halfW + 5.4 * m.headScale);
+      ctx.beginPath();
+      ctx.moveTo(dx - dir * 0.6, cornerY - 4.4 * m.headScale);
+      ctx.quadraticCurveTo(dx + dir * 2.8, cornerY, dx - dir * 0.4, cornerY + 4.8 * m.headScale);
+      ctx.stroke();
+    }
+  }
+
   if (openH < 1.25) {
     ctx.strokeStyle = "rgba(68, 20, 32, 0.66)";
     ctx.lineWidth = 1.35;
@@ -2681,8 +2964,26 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
       ctx.bezierCurveTo(-m.headW - 4, -m.headH - 8, m.headW + 4, -m.headH - 8, m.headW + 1.5, -12);
       ctx.quadraticCurveTo(m.headW - 5, -42 * m.headScale, 0, -46 * m.headScale);
       ctx.quadraticCurveTo(-m.headW + 5, -42 * m.headScale, -m.headW - 1.5, -12);
+    } else if (hs === "mohawk") {
+      // Cropped sides, drawn faintly like a buzz cut, under a tall crest down the middle
+      ctx.fillStyle = rgbStr(hairRgb, 0.55);
+      ctx.moveTo(-m.headW - 1.5, -12);
+      ctx.bezierCurveTo(-m.headW - 4, -m.headH - 8, m.headW + 4, -m.headH - 8, m.headW + 1.5, -12);
+      ctx.quadraticCurveTo(m.headW - 5, -42 * m.headScale, 0, -46 * m.headScale);
+      ctx.quadraticCurveTo(-m.headW + 5, -42 * m.headScale, -m.headW - 1.5, -12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = fGrad;
+      const crestHalf = m.headW * 0.3;
+      const crestTop = -m.headH - 31;
+      ctx.beginPath();
+      ctx.moveTo(-crestHalf, -43 * m.headScale);
+      ctx.bezierCurveTo(-crestHalf - 5, -m.headH - 6, -crestHalf - 1, crestTop + 8, -crestHalf * 0.45, crestTop);
+      ctx.quadraticCurveTo(1, crestTop - 6, crestHalf * 0.6, crestTop + 3);
+      ctx.bezierCurveTo(crestHalf + 4, crestTop + 10, crestHalf + 5, -m.headH - 6, crestHalf, -43 * m.headScale);
+      ctx.quadraticCurveTo(0, -49 * m.headScale, -crestHalf, -43 * m.headScale);
     } else {
-      // side_sweep, pixie, updo_bun, ponytail
+      // side_sweep, pixie, updo_bun, ponytail, pigtails, space_buns
       ctx.moveTo(-m.headW - 5, -10);
       ctx.bezierCurveTo(-m.headW - 10, -m.headH - 15, -20, -m.headH - 22, 6, -m.headH - 19);
       ctx.bezierCurveTo(32, -m.headH - 16, m.headW + 10, -m.headH - 10, m.headW + 5, -10);
@@ -2697,7 +2998,7 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     ctx.fill();
 
     // Straight fringe across the forehead, ending just above the brows
-    if (avatar.fringe && hs !== "buzz") {
+    if (avatar.fringe && hs !== "buzz" && hs !== "mohawk") {
       const fTop = -m.headH * 0.82;
       const fBottom = -35 * m.headScale;
       const fHalf = m.headW - 3;
@@ -2715,7 +3016,7 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
     ctx.restore();
 
     // Specular hair crown ribbon
-    if (hs !== "buzz" && !hatOn) {
+    if (hs !== "buzz" && hs !== "mohawk" && !hatOn) {
       ctx.strokeStyle = rgbStr(hairHiRgb, 0.34);
       ctx.lineWidth = 2.8;
       ctx.lineCap = "round";
@@ -2796,6 +3097,145 @@ export function drawBotAvatar(ctx, w, h, rawAvatar, anim, nowMs = performance.no
         ctx.roundRect(cupX - dir * 6.5 - 2, -14, 4, 25, 2);
         ctx.fill();
       }
+    } else if (headwear === "bow") {
+      // A ribbon bow worn to one side of the crown
+      ctx.save();
+      ctx.translate(m.headW * 0.5, -m.headH - 7);
+      ctx.rotate(0.3);
+      for (const dir of [-1, 1]) {
+        const loopGrad = ctx.createLinearGradient(0, -10, dir * 18, 10);
+        loopGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 0.8)));
+        loopGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 1.16)));
+        ctx.fillStyle = loopGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(dir * 6, -13, dir * 20, -12, dir * 18, 0);
+        ctx.bezierCurveTo(dir * 20, 12, dir * 6, 13, 0, 0);
+        ctx.fill();
+      }
+      ctx.fillStyle = rgbStr(shadeRgb(wearRgb, 0.68));
+      ctx.beginPath();
+      ctx.roundRect(-3.8, -4.8, 7.6, 9.6, 2.6);
+      ctx.fill();
+      ctx.restore();
+    } else if (headwear === "flower") {
+      // A flower tucked above one ear
+      const fx = -m.headW * 0.86;
+      const fy = -m.headH * 0.5;
+      ctx.fillStyle = rgbStr(wearRgb);
+      ctx.strokeStyle = rgbStr(shadeRgb(wearRgb, 0.7), 0.7);
+      ctx.lineWidth = 0.7;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        ctx.beginPath();
+        ctx.ellipse(fx + Math.cos(a) * 6.4, fy + Math.sin(a) * 6.4, 5.4, 3.7, a, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#f2c94c";
+      ctx.beginPath();
+      ctx.arc(fx, fy, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (headwear === "tiara") {
+      // A slim band across the hair with three points and a jewel
+      const ty = -m.headH * 0.93;
+      const half = m.headW * 0.64;
+      ctx.fillStyle = rgbStr(wearRgb);
+      ctx.strokeStyle = rgbStr(shadeRgb(wearRgb, 0.66), 0.85);
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-half, ty + 5);
+      ctx.quadraticCurveTo(0, ty - 4, half, ty + 5);
+      ctx.lineTo(half - 1, ty + 9);
+      ctx.quadraticCurveTo(0, ty, -half + 1, ty + 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      for (const [px, rise] of [[-half * 0.5, 7.5], [0, 12.5], [half * 0.5, 7.5]]) {
+        const base = px === 0 ? ty + 0.5 : ty + 1.6;
+        ctx.beginPath();
+        ctx.moveTo(px - 4.6, base + 1.6);
+        ctx.lineTo(px, base - rise);
+        ctx.lineTo(px + 4.6, base + 1.6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = rgbStr(outAccRgb);
+      ctx.beginPath();
+      ctx.arc(0, ty - 5.4, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+      ctx.beginPath();
+      ctx.arc(-0.8, ty - 6.2, 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (headwear === "fedora") {
+      // A brimmed hat: a pinched crown, a ribbon band and a wide brim over the brow
+      const brimY = bandY + 5;
+      const brimHalf = m.headW + 25;
+      const crownTop = -m.headH - 31;
+      const crownGrad = ctx.createLinearGradient(-rimX, crownTop, rimX, brimY);
+      crownGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 1.18)));
+      crownGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 0.74)));
+      ctx.fillStyle = crownGrad;
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 2, brimY);
+      ctx.bezierCurveTo(-rimX - 2, crownTop + 14, -m.headW * 0.62, crownTop, -8, crownTop + 3);
+      ctx.quadraticCurveTo(0, crownTop + 9, 8, crownTop + 3);
+      ctx.bezierCurveTo(m.headW * 0.62, crownTop, rimX + 2, crownTop + 14, rimX - 2, brimY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = rgbStr(shadeRgb(wearRgb, 0.48));
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 1, brimY - 10);
+      ctx.quadraticCurveTo(0, brimY - 18, rimX - 1, brimY - 10);
+      ctx.lineTo(rimX - 2, brimY);
+      ctx.quadraticCurveTo(0, brimY - 9, -rimX + 2, brimY);
+      ctx.closePath();
+      ctx.fill();
+      const brimGrad = ctx.createLinearGradient(0, brimY - 10, 0, brimY + 6);
+      brimGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 1.06)));
+      brimGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 0.6)));
+      ctx.fillStyle = brimGrad;
+      ctx.beginPath();
+      ctx.moveTo(-brimHalf, brimY + 4);
+      ctx.quadraticCurveTo(0, brimY - 15, brimHalf, brimY + 4);
+      ctx.quadraticCurveTo(0, brimY - 2, -brimHalf, brimY + 4);
+      ctx.closePath();
+      ctx.fill();
+    } else if (headwear === "chef") {
+      // A chef's toque: a tall band under a puffed crown
+      const bandTop = bandY - 17;
+      const puffTop = -m.headH - 46;
+      const toqueGrad = ctx.createLinearGradient(-rimX, puffTop, rimX, bandY + 6);
+      toqueGrad.addColorStop(0, rgbStr(shadeRgb(wearRgb, 1.08)));
+      toqueGrad.addColorStop(1, rgbStr(shadeRgb(wearRgb, 0.84)));
+      ctx.fillStyle = toqueGrad;
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 2, bandTop + 2);
+      ctx.bezierCurveTo(-rimX - 22, bandTop - 6, -rimX - 14, puffTop + 6, -m.headW * 0.42, puffTop + 6);
+      ctx.bezierCurveTo(-m.headW * 0.3, puffTop - 8, m.headW * 0.3, puffTop - 8, m.headW * 0.42, puffTop + 6);
+      ctx.bezierCurveTo(rimX + 14, puffTop + 6, rimX + 22, bandTop - 6, rimX - 2, bandTop + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = rgbStr(shadeRgb(wearRgb, 0.66), 0.55);
+      ctx.lineWidth = 1;
+      for (const sx of [-0.5, 0, 0.5]) {
+        ctx.beginPath();
+        ctx.moveTo(sx * rimX, bandTop - 5 + Math.abs(sx) * 4);
+        ctx.quadraticCurveTo(sx * rimX * 1.25, puffTop + 26, sx * rimX * 1.05, puffTop + 14);
+        ctx.stroke();
+      }
+      ctx.fillStyle = rgbStr(shadeRgb(wearRgb, 0.93));
+      ctx.beginPath();
+      ctx.moveTo(-rimX + 1, bandY + 6);
+      ctx.lineTo(-rimX + 2, bandTop);
+      ctx.quadraticCurveTo(0, bandTop - 9, rimX - 2, bandTop);
+      ctx.lineTo(rimX - 1, bandY + 6);
+      ctx.quadraticCurveTo(0, bandY - 5, -rimX + 1, bandY + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     } else if (headwear === "headscarf") {
       // A scarf wrapped around the head and under the chin, leaving the face open
       const faceTop = -m.headH * 0.64;

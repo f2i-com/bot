@@ -14,6 +14,7 @@ import {
   estimateCueTimeline,
   runDueCues,
 } from "./avatar-renderer.js";
+import { normalizePersona, personaGreeting } from "./persona.js";
 import {
   AIMLEngine,
   stripSpeechTags,
@@ -709,6 +710,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     baseBrain: true, // everyday small talk underneath your own AIML rules
     facts: {}, // { about, hours, email, phone, address, pricing }: answered without writing any rules
     rememberChat: true, // keep the conversation when the visitor moves to another page (this tab only)
+    persona: null, // a personality: "bubbly", "grumpy", ... or an object (see persona.js); null for none
     wasmUrl: "./tts.wasm",
     aimlUrl: "",
     aimlXml: STARTER_AIML_PACKS.concierge.xml,
@@ -717,6 +719,10 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     ...userConfig,
   };
   config.avatar = { ...DEFAULT_AVATAR, ...(userConfig.avatar || {}) };
+  config.persona = normalizePersona(config.persona);
+  // A bot with a personality and no greeting of its own greets in character.
+  if (config.persona && userConfig.greeting === undefined) config.greeting = personaGreeting(config.persona, config);
+  const restingMood = () => (config.persona ? config.persona.mood : "");
 
   // Create host container & Shadow DOM
   const hostEl = document.createElement("div");
@@ -851,6 +857,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   const aiml = new AIMLEngine({
     botProps: botPropsFromConfig(),
     baseXml: config.baseBrain === false ? "" : BASE_AIML_XML,
+    persona: config.persona,
   });
   const defaultChips = () => aiml.quickChips.map((c) => ({ label: c, query: c }));
 
@@ -940,6 +947,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
   // Initialize TTS WASM + Web Audio Playback + 200 Hz Viseme Loop
   const anim = createAnimState();
+  setAvatarMood(anim, restingMood());
   const pointer = { nx: 0, ny: 0, active: false };
   let ttsVoice = null;
   let audioCtx = null;
@@ -981,7 +989,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     captionKey = "";
     cueTimeline = null;
     silentCueStartMs = 0;
-    setAvatarMood(anim, "");
+    setAvatarMood(anim, restingMood());
     setSpeakBtn(false);
     if (ttsVoice) headStatusEl.textContent = STATUS_READY;
   }
@@ -1118,7 +1126,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
       // Fire anything still pending (a gesture written at the very end of the line), then relax the face.
       runDueCues(anim, cueTimeline, Infinity);
       cueTimeline = null;
-      setAvatarMood(anim, "");
+      setAvatarMood(anim, restingMood());
       isPlaying = false;
       activeSpeech = null;
       captionKey = "";
@@ -1369,6 +1377,11 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
             ttsVoice.configure(patch.voice);
           } catch {}
         }
+      }
+      if (patch.persona !== undefined) {
+        config.persona = normalizePersona(patch.persona);
+        aiml.setPersona(config.persona);
+        setAvatarMood(anim, restingMood());
       }
       if (patch.baseBrain !== undefined && Boolean(patch.baseBrain) !== (config.baseBrain !== false)) {
         config.baseBrain = Boolean(patch.baseBrain);
