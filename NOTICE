@@ -5,5 +5,9 @@ This product includes the tts.wasm speech synthesizer from the tts project
 (https://github.com/f2i-com/tts), by the same authors, distributed under the
 Apache License, Version 2.0.
 
+This product includes the stt.wasm speech recognizer from the stt project
+(https://github.com/f2i-com/stt), by the same authors. It contains a speech
+model by NVIDIA, licensed under CC-BY-4.0; see THIRD-PARTY-NOTICES.md.
+
 Third-party data, fonts and icons that ship with this product are credited,
 with their licenses, in THIRD-PARTY-NOTICES.md.

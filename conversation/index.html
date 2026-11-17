@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Talk with a bot.computer character</title>
+<meta name="description" content="Have a spoken conversation with a bot.computer character, or with a bot you design yourself. It runs entirely in your browser: stt.wasm listens, an AIML brain answers and tts.wasm speaks.">
+<link rel="canonical" href="https://bot.computer/conversation/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://bot.computer/conversation/">
+<meta property="og:site_name" content="bot.computer">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="Talk with a bot.computer character">
+<meta property="og:description" content="A spoken conversation with an animated character that runs entirely in your browser. Nothing you say leaves your device.">
+<meta property="og:image" content="https://bot.computer/assets/share-card.jpg">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A cartoon website companion saying “Hi! Welcome to our website!” next to the headline “Animated speaking companions for your website”.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Talk with a bot.computer character">
+<meta name="twitter:description" content="A spoken conversation with an animated character that runs entirely in your browser. Nothing you say leaves your device.">
+<meta name="twitter:image" content="https://bot.computer/assets/share-card.jpg">
+<meta name="theme-color" content="#f3f5f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#090d18" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preload" href="../vendor/fonts/bricolage-grotesque-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="./styles.css">
+<script>
+  // Same theme as the rest of bot.computer (chosen on the main page), before the page paints.
+  try {
+    var savedTheme = localStorage.getItem("bc-theme");
+    if (savedTheme === "light" || savedTheme === "dark") document.documentElement.setAttribute("data-theme", savedTheme);
+  } catch (e) {}
+</script>
+</head>
+<body>
+<div class="talk">
+  <header class="bar">
+    <div class="bar-title">
+      <a class="home" href="../" title="bot.computer home"><img src="../assets/logo-mark.svg" alt="bot.computer" width="34" height="34"></a>
+      <h1 class="title"><label for="characterSelect">Talk with</label> <select id="characterSelect" disabled></select></h1>
+    </div>
+    <div class="bar-actions">
+      <a id="designLink" class="quiet icon-btn" href="../#studioSection" title="Design your own bot in the studio, then talk with it here">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+        <span class="btn-text" id="designText">Design your own</span>
+      </a>
+      <button type="button" id="soundBtn" class="quiet icon-btn" aria-label="Sound" aria-pressed="true">
+        <svg class="ic sound-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.8 5.2a9.5 9.5 0 0 1 0 13.6"/></svg>
+        <svg class="ic sound-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg>
+        <span class="btn-text" id="soundText">Sound on</span>
+      </button>
+      <button type="button" id="settingsBtn" class="quiet icon-btn" aria-label="Settings" aria-haspopup="dialog">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+        <span class="btn-text">Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage-col" aria-label="Character">
+      <div class="stage" id="stage" title="">
+        <canvas id="avatarCanvas" aria-hidden="true"></canvas>
+        <p class="caption" id="caption" aria-hidden="true"></p>
+      </div>
+      <canvas id="voiceLine" class="voice-line" aria-hidden="true"></canvas>
+    </section>
+
+    <div class="controls">
+      <button type="button" id="talkBtn" class="talk-btn" disabled>
+        <span class="talk-ring" id="talkRing" aria-hidden="true"></span>
+        <span id="talkLabel">Start talking</span>
+      </button>
+      <p class="status" id="status" role="status" data-who="none">Loading the voice…</p>
+    </div>
+
+    <section class="script-col" aria-label="Conversation">
+      <ol class="script" id="script" aria-live="polite">
+        <li class="intro" id="intro">
+          Press <strong>Start talking</strong> and say hello. The conversation appears here as you go.
+          Everything runs in this tab: <strong>stt.wasm</strong> turns your voice into words,
+          the <strong>bot.computer</strong> AIML brain chooses the answer, and <strong>tts.wasm</strong>
+          speaks it. Nothing you say is sent anywhere.
+          <span class="intro-more">Pick who to talk with at the top, or <a href="../#studioSection">design your own bot</a> and talk with it here.</span>
+        </li>
+      </ol>
+      <div class="suggestions" id="suggestions"></div>
+      <form class="type-form" id="typeForm">
+        <input type="text" id="typeInput" placeholder="Or type a message" autocomplete="off" aria-label="Message" disabled>
+        <button type="submit" id="sendBtn" disabled>Send</button>
+      </form>
+    </section>
+  </main>
+</div>
+
+<dialog id="settingsDialog" class="settings" aria-labelledby="settingsTitle">
+  <form method="dialog">
+    <h2 id="settingsTitle">Settings</h2>
+    <label class="field">
+      <span class="field-name">What the character knows about</span>
+      <select id="packSelect"></select>
+      <span class="field-hint" id="packHint" hidden></span>
+    </label>
+    <label class="field">
+      <span class="field-name">Answer after you pause for <output id="hangOut" for="hangRange">0.7 s</output></span>
+      <input type="range" id="hangRange" min="400" max="1600" step="50" value="700">
+      <span class="field-hint">Longer gives you time to think mid-sentence; shorter answers sooner.</span>
+    </label>
+    <label class="field">
+      <span class="field-name">Microphone sensitivity</span>
+      <input type="range" id="sensitivityRange" min="6" max="26" step="1" value="17">
+      <span class="field-hint">Turn it down if background noise sets it off; up if it misses quiet speech.</span>
+    </label>
+    <label class="check">
+      <input type="checkbox" id="unsureCheck" checked>
+      Underline words the recognizer was unsure of
+    </label>
+    <div class="settings-actions">
+      <button type="button" id="clearBtn" class="quiet">Clear conversation</button>
+      <button value="close" class="primary">Done</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

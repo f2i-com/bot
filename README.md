@@ -11,6 +11,7 @@
 - **AIML 2.0 XML Chatbot Brain**: Turn any companion into an interactive Q&A guide using standard AIML XML (`<pattern>`, `*` / `_` / `#` / `^` wildcards, `<srai>`, `<random>`, `<that>`, `<topic>`, `<set>`/`<get>` memory, `<condition>`, `<emote>`, and `<reply>` quick chips), plus word sets and lookup maps (`<set>` in patterns, `<map>` in templates), arithmetic (`<calc>`), date maths, and rules that can step aside (`<fallback/>`).
 - **Inline Avatar Actions**: Write `[wave]`, `[wink]`, `[nod]`, `[smile]`, `[laugh]`, `[think]`, `[surprised]`, `[shake]`, `[shrug]`, `[thumbsup]`, `[tilt]` or `[bow]` anywhere in a greeting or an answer. The tag is never spoken; the avatar performs it when the speech reaches that point. Voice styles such as `[cheerful]`, `[sad]` and `[serious]` also set the face.
 - **A Voice That Laughs, Sighs and Whispers**: The voice makes 53 sounds that are not words, and the avatar acts each one out as it is heard: `[laugh]`, `[chuckle]`, `[giggle]`, `[gasp]`, `[sigh]`, `[yawn]`, `[hmm]`, `[aww]`, `[phew]`, `[whistle]`, `[ahem]`, `[sneeze]` and more. It can also speak while laughing (`[laughing] ... [/laughing]`, or the "Laughing while speaking" slider). The studio has a palette that plays any sound and inserts its tag, and captions say what was heard: "(laughs)".
+- **Spoken Conversation** ([bot.computer/conversation/](https://bot.computer/conversation/)): Talk with a character out loud. [`stt.wasm`](https://github.com/f2i-com/stt) turns your voice into words, the AIML brain answers and `tts.wasm` talks back, with captions, gestures and the avatar listening while you speak. Pick one of the starting characters, or design your own bot in the studio and press **Talk to** to have a conversation with it. Nothing you say leaves the browser. See [Conversation](#conversation).
 - **Personalities**: Give a bot a character (friendly, bubbly, calm, professional, witty, shy, grumpy, dramatic, laid-back or curious) and the same rules come out differently: its own hello and goodbye, "I'm" or "I am", exclamation marks or none, the laugh it laughs, the things it tends to say first and last, a catchphrase, what it calls visitors. Four dials (energy, formality, playfulness, chattiness) and a set of speaking habits are yours to change, and none of it touches your AIML. See [Personalities](#personalities).
 - **Bot Generator**: One click makes a whole new bot: a name, a look, a voice and a personality that go together, with a greeting in that personality's own words. Tick which of the four it may change. "Download config" saves the result as one JSON file and "Load config" brings it back.
 - **Base Brain for General Conversation**: A built-in AIML layer of about 390 rules sits underneath your own, which always win. It handles greetings and goodbyes, how the visitor feels (with care for the serious cases), questions about the bot itself, compliments and complaints, jokes, riddles, trivia, rock paper scissors, guess my number, knock knock jokes, sums ("what's 15% of 80?"), unit conversions, dates ("how many days until Christmas?"), capitals and a little general knowledge. It remembers what a visitor says about themselves (name, age, work, pets, likes, favourites) for as long as the tab is open, and forgets it on request. How well does it do? On the five test conversations used to build it (33 to 159 everyday lines each) it has a specific, fitting answer for 93% to 99% of lines. Those scripts shaped the rules, so that is the best case. Each new script, on its first run, got a specific answer to between 57% and 68% of its lines; most of the rest got an honest "I don't know that one" or a sympathetic general reply, and a few got a wrong answer that was then fixed. It is a rule-based bot, not a language model: expect good small talk, not open-ended conversation.
@@ -28,6 +29,7 @@
 npm run build   # syncs tts.wasm from ../tts (or E:\repos\softn_bot\tts) & bundles embed/bot-embed.js
 npm test        # runs automated TTS viseme, sculptor, AIML XML, and embed SDK smoke tests
 npm start       # serves https://bot.computer locally at http://localhost:8090/
+                # (the spoken conversation is at http://localhost:8090/conversation/)
 ```
 
 ## Embedding on Any Website
@@ -104,6 +106,22 @@ BotComputer.VOICE_SOUND_TAGS;         // every sound tag the voice performs
 ```
 
 To give the bot its own voice for small talk, define any of `HELLO`, `HOW ARE YOU`, `WHO ARE YOU`, `WHAT CAN YOU DO`, `THANKS #`, `BYE`, `# JOKE #`, `# SING #` or `*` in your document and the base version steps aside. The full base layer is exported as `BotComputer.BASE_AIML_XML` (and `BASE_AIML_XML` from `src/aiml-engine.js`).
+
+## Conversation
+
+[`conversation/`](./conversation/) (live at **https://bot.computer/conversation/**) is a full-screen spoken conversation with a character. Press **Start talking** and say hello:
+
+1. `vendor/stt/stt.wasm` ([stt.computer](https://github.com/f2i-com/stt)) listens to the microphone in a Web Worker and turns each phrase into words, with a confidence for every word.
+2. The bot's AIML brain chooses the answer: the base brain plus a topic pack for the starting characters, or your own rules, facts and personality for a bot you designed.
+3. `tts.wasm` speaks the answer while the avatar's lips follow the voice, gestures fire on cue and a caption highlights each word.
+
+The microphone works like a walkie-talkie: it is paused while the character talks, so the character never hears itself, and it listens again 0.3 s after. Your turn ends when you have been quiet for the pause set in **Settings** (0.7 s to start with). Click or tap the character, or press Esc, to interrupt it. You can also type, or tap a suggestion.
+
+**Talking with your own bot.** The studio saves your design in the browser, and the conversation page reads it: press **Talk to** (in the studio header) or **Talk out loud** (beside the chat tester) to open a conversation with the bot on screen, with its look, voice, personality, rules and business facts. Keep both tabs open and changes made in the studio reach the conversation within a second or two, without losing what it remembers about you. "Your bot" is also in the list of characters at the top of the page.
+
+**Links.** `conversation/` opens with the last character used; `conversation/?with=chloe` (or `marcus`, `viktor`, `nova`, `arthur`, `aria`) opens with that character, and the address bar always shows the link for the current one, ready to share. `?with=yours` opens your own bot, in a browser where one has been designed.
+
+**Size.** `stt.wasm` is about 14 MB (12 MB gzipped), with NVIDIA's English Conformer-CTC speech model inside (CC-BY-4.0, see `THIRD-PARTY-NOTICES.md`). The page loads the voice first, so typing works within seconds, and fetches the recognizer in the background with its progress shown; **Start talking** comes on when it is ready. Only this page loads it: the studio and the embed widget do not. `vendor/stt/VERSION` records which stt release is vendored (the published v1.0.0).
 
 ## Personalities
 

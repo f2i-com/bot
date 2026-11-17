@@ -107,6 +107,7 @@
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.2" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol>
       <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
       <symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3.5l1.8 4.9 4.9 1.8-4.9 1.8L11 16.9l-1.8-4.9-4.9-1.8 4.9-1.8z"/><path d="M18.5 15v5"/><path d="M16 17.5h5"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9"/><path d="M19 7h1"/><circle cx="16" cy="7" r="2.5"/><path d="M4 17h1"/><path d="M11 17h9"/><circle cx="8" cy="17" r="2.5"/></symbol>
       <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8.5 8.5h.01"/><path d="M15.5 15.5h.01"/><path d="M12 12h.01"/><path d="M15.5 8.5h.01"/><path d="M8.5 15.5h.01"/></symbol>
@@ -194,6 +195,7 @@
 
         <div class="hero-cta-row">
           <a href="#studioSection" class="btn lg primary"><svg class="ic"><use href="#i-sculpt"/></svg>Design your bot</a>
+          <a href="./conversation/" class="btn lg talk-cta" id="heroTalkBtn" title="Have a spoken conversation with a character: it listens, answers and talks back"><svg class="ic"><use href="#i-mic"/></svg><span class="lbl-long">Start a conversation</span><span class="lbl-short">Conversation</span></a>
           <button type="button" id="heroSpeakBtn" class="btn lg"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Hear the greeting</span></button>
           <a href="./embed-demo.html" target="_blank" rel="noopener" class="btn lg subtle"><span class="lbl-long">See it on a sample site</span><span class="lbl-short">Sample site</span><svg class="ic"><use href="#i-external"/></svg></a>
         </div>
@@ -309,6 +311,7 @@
               </div>
             </details>
           </div>
+          <a href="./conversation/?with=yours" target="_blank" rel="noopener" class="btn sm talk-cta" data-talk-link title="Have a spoken conversation with the bot you are designing, in a new tab"><svg class="ic"><use href="#i-mic"/></svg><span>Talk to <span class="talk-name" data-talk-name>Aria</span></span></a>
           <button type="button" id="savePresetJsonBtn" class="btn sm" title="Download this bot (look, voice, personality and chat rules) as a JSON file"><svg class="ic"><use href="#i-download"/></svg>Download config</button>
           <button type="button" id="loadPresetJsonBtn" class="btn sm" title="Load a saved bot configuration JSON file"><svg class="ic"><use href="#i-upload"/></svg>Load config</button>
           <input type="file" id="loadPresetJsonInput" accept=".json,application/json" hidden>
@@ -924,7 +927,10 @@
               <div class="control-block">
                 <div class="block-head">
                   <h3>Test the chat</h3>
-                  <button type="button" id="resetStudioChatBtn" class="btn xs"><svg class="ic"><use href="#i-reset"/></svg>Clear</button>
+                  <div class="head-actions">
+                    <a href="./conversation/?with=yours" target="_blank" rel="noopener" class="btn xs" data-talk-link title="Talk with your bot out loud, in a new tab"><svg class="ic"><use href="#i-mic"/></svg>Talk out loud</a>
+                    <button type="button" id="resetStudioChatBtn" class="btn xs"><svg class="ic"><use href="#i-reset"/></svg>Clear</button>
+                  </div>
                 </div>
                 <div class="studio-chat-box">
                   <div class="studio-chat-messages" id="studioChatMessages" aria-live="polite"></div>
@@ -1082,6 +1088,10 @@
         <details class="faq-item">
           <summary><h3>Can the avatar gesture while it talks?</h3></summary>
           <p>Yes. Write an action such as <code>[wave]</code>, <code>[wink]</code> or <code>[nod]</code> anywhere in a greeting or an answer, and the avatar performs it when the speech reaches that point. The tag itself is never spoken. Voice styles such as <code>[cheerful]</code> or <code>[sad]</code> change the face as well as the voice.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>Can I talk to it out loud?</h3></summary>
+          <p>Yes. <a href="./conversation/">Start a conversation</a>, press <strong>Start talking</strong> and say hello: the character listens, answers in its own voice and waits for you to reply. Your speech is turned into words by <code>stt.wasm</code> right in your browser, so nothing you say is sent anywhere. To talk with a bot you designed, press <strong>Talk to</strong> in the studio. The speech recognizer is a 14&nbsp;MB download the first time; you can type while it loads.</p>
         </details>
         <details class="faq-item">
           <summary><h3>Can I give my bot a personality?</h3></summary>

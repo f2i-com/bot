@@ -76,7 +76,7 @@ ${widgetSrc}
   }
 
   const BotComputer = {
-    version: "1.3.0",
+    version: "1.4.0",
     AIMLEngine,
     AVATAR_PRESETS,
     AVATAR_ACTIONS,

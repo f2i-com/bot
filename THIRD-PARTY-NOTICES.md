@@ -45,6 +45,21 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
+## NVIDIA Conformer-CTC speech model
+
+The speech recognizer in `vendor/stt/stt.wasm`, used by the conversation page
+(`conversation/`), contains the weights of NVIDIA's `stt_en_conformer_ctc_small`
+speech recognition model (https://huggingface.co/nvidia/stt_en_conformer_ctc_small),
+trained by NVIDIA on its NeMo ASRSET 2.0 collection of English speech.
+License: Creative Commons Attribution 4.0 International (CC-BY-4.0),
+https://creativecommons.org/licenses/by/4.0/.
+
+Changes made in the stt project (https://github.com/f2i-com/stt): the linear and
+convolution weights are quantized to 8-bit integers with one scale per output
+row, depthwise-convolution batch normalization is folded into the convolution
+weights and biases, and the subsampling convolution layouts are pre-transposed.
+No weights were retrained.
+
 ## CMU ARCTIC speech databases
 
 The speaker profiles in `vendor/tts/profiles/arctic_*.json` are acoustic

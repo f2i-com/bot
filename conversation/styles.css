@@ -1,0 +1,886 @@
+/* bot.computer conversation: one stage, one script, two voices. Your voice is berry and the
+   character's is bot.computer blue, everywhere: the speaker rules in the script, the voice line
+   under the stage, the status dot. Three blocks (stage, controls, script) are placed by grid
+   areas: side by side on wide screens, stacked to fit the screen on phones. Colours, type and
+   the light/dark switch follow the rest of the bot.computer site. */
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("../vendor/fonts/bricolage-grotesque-latin-wght.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+  --page: #f3f5f9;
+  --panel: #ffffff;
+  --field: #f7f9fc;
+  --ink: #0d1322;
+  --ink-2: #5f6880;
+  --rule: #dbe1ec;
+  --you: #b43c74;
+  --bot: #1a5fe6;
+  --on-accent: #ffffff;
+  --caption-bg: rgba(9, 13, 24, 0.8);
+  --display: "Bricolage Grotesque", system-ui, sans-serif;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --edge-l: max(24px, env(safe-area-inset-left));
+  --edge-r: max(24px, env(safe-area-inset-right));
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #090d18;
+  --panel: #111828;
+  --field: #0d1322;
+  --ink: #eef1f7;
+  --ink-2: #8892aa;
+  --rule: #222c42;
+  --you: #f07ab2;
+  --bot: #6aa6ff;
+  --on-accent: #090d18;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #090d18;
+    --panel: #111828;
+    --field: #0d1322;
+    --ink: #eef1f7;
+    --ink-2: #8892aa;
+    --rule: #222c42;
+    --you: #f07ab2;
+    --bot: #6aa6ff;
+    --on-accent: #090d18;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 16px/1.5 var(--ui);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+:focus-visible {
+  outline: 3px solid var(--bot);
+  outline-offset: 2px;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled,
+select:disabled,
+input:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.talk {
+  max-width: 1200px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 16px var(--edge-r) max(24px, env(safe-area-inset-bottom)) var(--edge-l);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Top bar ---------------------------------------------------------------------------- */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: max(0px, env(safe-area-inset-top)) 0 14px;
+}
+
+.bar-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.home {
+  display: inline-flex;
+  flex: none;
+  border-radius: 9px;
+}
+
+.home img {
+  display: block;
+  width: 34px;
+  height: 34px;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 31px;
+  font-weight: 640;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.title select {
+  field-sizing: content;
+  appearance: none;
+  border: 0;
+  border-bottom: 3px solid var(--bot);
+  border-radius: 0;
+  background: transparent;
+  color: var(--bot);
+  font-weight: 700;
+  padding: 0 1.1em 0 0;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 0.55em) 58%, calc(100% - 0.3em) 58%;
+  background-size: 0.25em 0.25em, 0.25em 0.25em;
+  background-repeat: no-repeat;
+}
+
+.title select option,
+.title select optgroup {
+  font-family: var(--ui);
+  font-size: 16px;
+}
+
+.bar-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.quiet {
+  min-height: 40px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 10px;
+  padding: 7px 13px;
+  font-size: 14.5px;
+  font-weight: 560;
+}
+
+.quiet[aria-pressed="false"] {
+  color: var(--ink-2);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+a.quiet {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ic {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn[aria-pressed="true"] .sound-off,
+.icon-btn[aria-pressed="false"] .sound-on {
+  display: none;
+}
+
+/* ---- Layout ----------------------------------------------------------------------------- */
+
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "stage script"
+    "controls script";
+  column-gap: 32px;
+  row-gap: 14px;
+}
+
+/* ---- Stage ------------------------------------------------------------------------------ */
+
+.stage-col {
+  grid-area: stage;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The avatar renderer draws its own rounded card and backdrop, so the stage adds no frame. */
+.stage {
+  position: relative;
+  width: min(100%, 470px);
+  height: min(64dvh, 580px);
+  min-height: 300px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stage.can-interrupt {
+  cursor: pointer;
+}
+
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.caption {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  margin: 0;
+  padding: 10px 14px 11px;
+  border-radius: 14px;
+  background: var(--caption-bg);
+  color: rgba(244, 247, 251, 0.5);
+  font-family: var(--display);
+  font-size: clamp(17px, 2.1vw, 22px);
+  font-weight: 520;
+  line-height: 1.3;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.caption.visible {
+  opacity: 1;
+}
+
+.caption .said {
+  color: #f4f7fb;
+}
+
+.caption .now {
+  color: #ffffff;
+  text-decoration: underline 3px #6cb4ff;
+  text-underline-offset: 5px;
+}
+
+.voice-line {
+  width: min(100%, 470px);
+  height: 48px;
+  display: block;
+  flex: none;
+}
+
+.controls {
+  grid-area: controls;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.talk-btn {
+  position: relative;
+  min-width: 230px;
+  height: 58px;
+  padding: 0 30px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--you);
+  color: var(--on-accent);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: 0.005em;
+}
+
+.talk-btn.on {
+  background: transparent;
+  color: var(--you);
+  box-shadow: inset 0 0 0 2px var(--you);
+}
+
+/* Grows with your voice while the microphone is on. */
+.talk-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 3px solid var(--you);
+  opacity: 0;
+  transform: scale(1);
+  pointer-events: none;
+}
+
+.status {
+  margin: 0;
+  max-width: 34em;
+  min-height: 1.5em;
+  color: var(--ink-2);
+  font-size: 15px;
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* Inline, so the dot stays with the first word when the sentence wraps. */
+.status::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  vertical-align: 0.05em;
+  border-radius: 50%;
+  background: var(--rule);
+}
+
+.status[data-who="you"]::before {
+  background: var(--you);
+}
+
+.status[data-who="bot"]::before {
+  background: var(--bot);
+}
+
+/* ---- Script ----------------------------------------------------------------------------- */
+
+.script-col {
+  grid-area: script;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-height: calc(100dvh - 92px);
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 6px 0 14px;
+}
+
+.script {
+  list-style: none;
+  margin: 0;
+  padding: 16px 22px;
+  flex: 1;
+  min-height: 160px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.intro {
+  color: var(--ink-2);
+  font-size: 15px;
+  max-width: 60ch;
+}
+
+.intro strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.intro a {
+  color: var(--bot);
+  font-weight: 560;
+  text-underline-offset: 3px;
+}
+
+.intro-more {
+  display: block;
+  margin-top: 8px;
+}
+
+.turn {
+  padding-left: 14px;
+  border-left: 3px solid var(--bot);
+  max-width: 64ch;
+}
+
+.turn.you {
+  border-left-color: var(--you);
+}
+
+.who {
+  margin: 0 0 1px;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--bot);
+}
+
+.turn.you .who {
+  color: var(--you);
+}
+
+.words {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.turn.draft .words {
+  color: var(--ink-2);
+}
+
+.detail {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.unsure {
+  text-decoration: underline dotted 2px var(--you);
+  text-underline-offset: 4px;
+}
+
+.hide-unsure .unsure {
+  text-decoration: none;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 22px 2px;
+}
+
+.suggestions:empty {
+  display: none;
+}
+
+.suggestions .lead {
+  color: var(--ink-2);
+  font-size: 14px;
+  margin-right: 2px;
+  flex: none;
+}
+
+.suggestions button {
+  flex: none;
+  min-height: 36px;
+  border: 1px solid var(--rule);
+  background: var(--field);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 14px;
+}
+
+.type-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 22px 0;
+}
+
+.type-form input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--field);
+  font-size: 16px; /* 16px or more stops iOS Safari zooming the page on focus */
+}
+
+.type-form button {
+  height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--panel);
+  font-weight: 650;
+}
+
+/* Hover only where there is a pointer that hovers, so taps on phones leave nothing lit. */
+@media (hover: hover) {
+  .quiet:hover:not(:disabled) {
+    background: var(--panel);
+  }
+
+  .suggestions button:hover:not(:disabled) {
+    border-color: var(--bot);
+    color: var(--bot);
+  }
+}
+
+/* ---- Settings --------------------------------------------------------------------------- */
+
+.settings {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  padding: 22px 24px 20px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.settings::backdrop {
+  background: rgba(9, 15, 26, 0.45);
+}
+
+.settings h2 {
+  margin: 0 0 14px;
+  font-family: var(--display);
+  font-size: 25px;
+  font-weight: 650;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.field-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.field-hint {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.field select {
+  height: 44px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--field);
+  padding: 0 10px;
+  font-size: 16px;
+}
+
+.field input[type="range"] {
+  min-height: 32px;
+  accent-color: var(--bot);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--you);
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.primary {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 22px;
+  background: var(--bot);
+  color: var(--on-accent);
+  font-weight: 650;
+}
+
+/* ---- Phones and narrow windows: everything fits the screen, only the script scrolls ------- */
+
+@media (max-width: 860px) {
+  :root {
+    --edge-l: max(14px, env(safe-area-inset-left));
+    --edge-r: max(14px, env(safe-area-inset-right));
+  }
+
+  .talk {
+    height: 100dvh;
+    min-height: 0;
+    padding-top: 8px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .bar {
+    padding-bottom: 8px;
+  }
+
+  .title {
+    font-size: 23px;
+  }
+
+  .bar-title {
+    gap: 9px;
+  }
+
+  .home img {
+    width: 30px;
+    height: 30px;
+  }
+
+  .quiet {
+    padding: 6px 11px;
+    font-size: 14px;
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "stage"
+      "controls"
+      "script";
+    row-gap: 10px;
+  }
+
+  .stage-col {
+    gap: 4px;
+  }
+
+  .stage {
+    width: 100%;
+    height: clamp(170px, 34dvh, 400px);
+    min-height: 0;
+  }
+
+  .caption {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    padding: 8px 12px 9px;
+    font-size: clamp(16px, 4.4vw, 20px);
+  }
+
+  .voice-line {
+    width: 100%;
+    height: 30px;
+  }
+
+  .controls {
+    gap: 6px;
+  }
+
+  .talk-btn {
+    width: min(100%, 340px);
+    min-width: 0;
+    height: 54px;
+    font-size: 17px;
+  }
+
+  .status {
+    font-size: 14px;
+  }
+
+  .script-col {
+    max-height: none;
+    padding: 2px 0 12px;
+    border-radius: 16px;
+  }
+
+  .script {
+    min-height: 72px;
+    padding: 12px 16px;
+    gap: 14px;
+  }
+
+  .words {
+    font-size: 16.5px;
+  }
+
+  /* One swipeable row of suggestions instead of several wrapped rows. */
+  .suggestions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 6px 16px 2px;
+  }
+
+  .suggestions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .type-form {
+    padding: 8px 12px 0;
+  }
+
+  .type-form input,
+  .type-form button {
+    height: 48px;
+  }
+}
+
+/* Small screens: the top-bar buttons show only their icons. */
+@media (max-width: 560px) {
+  .icon-btn {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .icon-btn .btn-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 400px) {
+  .title {
+    font-size: 20px;
+  }
+
+  .bar-title {
+    gap: 8px;
+  }
+
+  .home img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .bar-actions {
+    gap: 4px;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+}
+
+/* Short phones: the stage gives up some height so the conversation keeps a few lines. */
+@media (max-width: 860px) and (max-height: 720px) {
+  .stage {
+    height: clamp(140px, 27dvh, 300px);
+  }
+
+  .voice-line {
+    height: 24px;
+  }
+
+  .talk-btn {
+    height: 50px;
+  }
+
+  .caption {
+    font-size: 16px;
+  }
+}
+
+/* Phones on their side: the stage and the script side by side, sized to the short screen. */
+@media (max-width: 1000px) and (max-height: 540px) and (orientation: landscape) {
+  .talk {
+    height: 100dvh;
+    min-height: 0;
+    padding-top: 6px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .bar {
+    padding-bottom: 6px;
+  }
+
+  .title {
+    font-size: 21px;
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "stage script"
+      "controls script";
+    column-gap: 14px;
+    row-gap: 6px;
+  }
+
+  .stage-col {
+    gap: 2px;
+  }
+
+  .stage {
+    width: 100%;
+    height: auto;
+    flex: 1;
+    min-height: 110px;
+  }
+
+  .voice-line {
+    height: 24px;
+  }
+
+  .caption {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    padding: 6px 10px 7px;
+    font-size: 15px;
+  }
+
+  .talk-btn {
+    height: 46px;
+    font-size: 16px;
+  }
+
+  .status {
+    font-size: 13px;
+  }
+
+  .script-col {
+    max-height: none;
+  }
+
+  .script {
+    min-height: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caption {
+    transition: none;
+  }
+}

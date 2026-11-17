@@ -560,6 +560,20 @@ button, select, input, textarea {
   display: none;
 }
 
+/* Links to the conversation page carry the voice colour on their microphone. */
+.talk-cta .ic {
+  color: var(--voice);
+}
+
+.talk-name {
+  display: inline-block;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
 .hero-note {
   margin-bottom: 30px;
   font-size: 13.5px;
@@ -2812,10 +2826,6 @@ input[type="color"]::-moz-color-swatch {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 12px;
-  }
-
-  .hero-cta-row > :first-child {
-    grid-column: 1 / -1;
   }
 
   .hero-cta-row .btn.lg {

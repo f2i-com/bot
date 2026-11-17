@@ -5,6 +5,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 import { initSync, TTS } from "../vendor/tts/tts.js";
+import { initSync as initSTT, STT } from "../vendor/stt/stt.js";
 import {
   AIMLEngine,
   STARTER_AIML_PACKS,
@@ -57,6 +58,17 @@ import {
   stylizeReply,
   personaToXml,
 } from "../src/persona.js";
+import {
+  YOURS,
+  STUDIO_KEY,
+  PRESET_GREETINGS,
+  presetCharacters,
+  readStudioDesign,
+  studioCharacter,
+  listeningGreeting,
+  alignCaption,
+  paginate,
+} from "../conversation/talk.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -967,6 +979,134 @@ assert.equal(typeof sandbox.BotComputer.randomPersona().id, "string");
 {
   const sdkBot = new sandbox.BotComputer.AIMLEngine({ baseXml: sandbox.BotComputer.BASE_AIML_XML, xml: "<aiml></aiml>", persona: "professional" });
   assert.ok(/I am|How may I/.test(sdkBot.reply("hello").displayText), "A personality works in the standalone bundle");
+}
+
+console.log("10. Testing the conversation page: stt.wasm hears, the brain answers, tts.wasm replies...");
+{
+  // The recognizer is the published stt release, with its speech model inside.
+  assert.equal(fs.readFileSync(path.join(root, "vendor", "stt", "VERSION"), "utf8").trim(), "1.0.0");
+  initSTT(fs.readFileSync(path.join(root, "vendor", "stt", "stt.wasm")));
+  assert.ok(STT.hasEmbeddedModel(), "stt.wasm should carry its speech model");
+  const ears = new STT();
+
+  // The round trip a conversation makes: a voice says something, the recognizer hears it, the
+  // brain answers, and the answer can be spoken again.
+  const mouth = new TTS("male");
+  const heardHello = ears.transcribe(mouth.speak("Hello, how are you today?"));
+  assert.equal(heardHello.text, "hello how are you today", JSON.stringify(heardHello));
+  assert.ok(heardHello.words.length === 5 && heardHello.words.every((w) => w.end > w.start && w.confidence > 0.5));
+  const her = new TTS("female");
+  const heardCapital = ears.transcribe(her.speak("What is the capital of France?"));
+  assert.ok(/capital of france/.test(heardCapital.text), heardCapital.text);
+
+  const aria = presetCharacters().find((c) => c.id === "aria");
+  const brain = new AIMLEngine({ botProps: aria.props, xml: STARTER_AIML_PACKS.companion.xml, baseXml: BASE_AIML_XML, persona: aria.persona });
+  assert.ok(/how about you|thanks for asking|doing/i.test(brain.reply(heardHello.text).displayText));
+  const answer = brain.reply(heardCapital.text);
+  assert.ok(/Paris/.test(answer.displayText), answer.displayText);
+  const spoken = her.speakScript(answer.speechText);
+  assert.ok(spoken.samples.length > 12000 && answer.cueWords === spoken.words.length, answer.speechText);
+  // And what was said back can itself be heard.
+  assert.ok(/paris/.test(ears.transcribe(her.speak(stripSpeechTags(answer.speechText))).text));
+  mouth.free();
+  her.free();
+  ears.free();
+
+  // The starting characters: one for each preset, each with a greeting the voice can say.
+  const presets = presetCharacters();
+  assert.deepEqual(presets.map((c) => c.id), AVATAR_PRESETS.map((p) => p.id));
+  const v = new TTS("female");
+  for (const c of presets) {
+    assert.ok(c.persona && c.voice.gender && c.pitchHz > 60 && c.props.about && c.rules === null && c.baseBrain, c.id);
+    assert.equal(c.greeting, PRESET_GREETINGS[c.id]);
+    const parsed = parseSpeechCues(c.greeting);
+    assert.equal(parsed.wordCount, v.speakScript(parsed.speechText).words.length, c.greeting);
+  }
+  for (const persona of PERSONALITIES) {
+    const line = listeningGreeting("Juno", normalizePersona(persona.id));
+    const parsed = parseSpeechCues(line);
+    assert.ok(line.includes("Juno"));
+    assert.equal(parsed.wordCount, v.speakScript(parsed.speechText).words.length, line);
+  }
+  assert.equal(listeningGreeting("Juno", null), "Hi! [wave] I'm Juno. I'm listening, so just talk to me.");
+
+  // The bot you design in the studio, read from what the studio saves in this browser.
+  assert.match(fs.readFileSync(path.join(root, "src", "app.js"), "utf8"), new RegExp(`const STORE_KEY = "${STUDIO_KEY}";`));
+  const saved = {
+    v: 1,
+    voiceTuning: 2,
+    activePresetId: "custom",
+    name: "Juno",
+    role: "Barista",
+    company: "Bean There",
+    greeting: "[cheerful] Welcome in!",
+    baseBrain: true,
+    facts: { hours: "seven till three, every day", email: "  hi@beanthere.test ", junk: "dropped" },
+    aimlXml: `<aiml><category><pattern># FLAT WHITE #</pattern><template>Our flat white is four dollars fifty.</template></category></aiml>`,
+    avatar: { hairStyle: "space_buns", headwear: "chef" },
+    voice: { gender: "male", pitchHz: 101, tractLengthCm: 17.6, speed: 0.97 },
+    persona: normalizePersona({ id: "grumpy", laugh: "snicker" }),
+  };
+  const fakeStorage = (value) => ({ getItem: (key) => (key === STUDIO_KEY ? value : null) });
+  const juno = studioCharacter(readStudioDesign(fakeStorage(JSON.stringify(saved))));
+  assert.equal(juno.id, YOURS);
+  assert.ok(juno.own && juno.name === "Juno" && juno.pitchHz === 101);
+  assert.deepEqual(juno.props, { name: "Juno", role: "Barista", company: "Bean There", website: "https://bot.computer", hours: "seven till three, every day", email: "hi@beanthere.test" });
+  assert.deepEqual(juno.voice, { gender: "male", preset: "", settings: saved.voice });
+  assert.equal(juno.avatar.hairStyle, "space_buns");
+  assert.equal(juno.avatar.skinColor, DEFAULT_AVATAR.skinColor, "Unsaved parts of the look come from the defaults");
+  assert.equal(juno.greeting, "[sigh] Fine, I'm listening. I'm Juno. Go on then.");
+  const junoBrain = new AIMLEngine({ botProps: juno.props, xml: juno.rules, baseXml: juno.baseBrain ? BASE_AIML_XML : "", persona: juno.persona });
+  const junoSays = (text) => junoBrain.reply(text).displayText;
+  assert.ok(/four dollars fifty/.test(junoSays("how much is a flat white")), "Your own rules answer");
+  assert.ok(/seven till three/.test(junoSays("when are you open")), "Your business facts answer");
+  assert.ok(/It's you|What do you need|What is it|Go on/.test(junoSays("hello")), "In your bot's own personality");
+  // Older designs, missing pieces, and anything that is not a design.
+  const older = studioCharacter({ v: 1, name: "  ", voice: { gender: "female", tractLengthCm: 13.9 } });
+  assert.equal(older.name, "Your bot");
+  assert.equal(older.voice.settings.tractLengthCm, 14.2, "A voice saved before tts.wasm 1.2 is retuned, as the studio does");
+  const voiceless = studioCharacter({ v: 1, name: "Max", activePresetId: "marcus" });
+  assert.deepEqual([voiceless.voice.preset, voiceless.voice.gender, voiceless.rules, voiceless.persona], ["arctic_bdl", "male", "", null]);
+  assert.equal(readStudioDesign(fakeStorage("not json")), null);
+  assert.equal(readStudioDesign(fakeStorage(JSON.stringify({ v: 2 }))), null);
+  assert.equal(readStudioDesign({ getItem() { throw new Error("blocked"); } }), null);
+  assert.equal(readStudioDesign(null), null);
+  assert.equal(studioCharacter(null), null);
+
+  // Captions: written words line up with the words the voice says ("3:30" is three spoken words).
+  for (const text of ["It's 3:30 p.m. and we're open!", "Our flat white is $4.50, and the 2-for-1 deal ends Mon.", "[laugh] Ha! Good one."]) {
+    const parsed = parseSpeechCues(text);
+    const said = v.speakScript(parsed.speechText);
+    const shown = stripSpeechTags(text);
+    const { labels, owner } = alignCaption(shown, said.words);
+    assert.equal(owner.length, said.words.length);
+    assert.ok(owner.every((o, i) => o >= 0 && o < labels.length && (i === 0 || o >= owner[i - 1])), `${text}: ${owner}`);
+    assert.equal(owner[owner.length - 1], labels.length - 1, `${text}: the caption reaches the last word`);
+  }
+  const pages = paginate("One two three. Four five six seven eight nine ten eleven twelve thirteen fourteen.".split(" "));
+  assert.deepEqual(pages.map((page) => page.length), [3, 11]);
+  v.free();
+
+  // The page is wired up: every module it loads exists, the site build ships it, the landing page
+  // and the studio link to it, and the sitemap lists it.
+  const pageDir = path.join(root, "conversation");
+  for (const file of ["index.html", "app.js", "styles.css", "talk.js"]) assert.ok(fs.existsSync(path.join(pageDir, file)), file);
+  const pageCode = fs.readFileSync(path.join(pageDir, "app.js"), "utf8") + fs.readFileSync(path.join(pageDir, "talk.js"), "utf8");
+  const loaded = [...pageCode.matchAll(/(?:from |import\()"(\.{1,2}\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(loaded.includes("../vendor/stt/stt.js") && loaded.includes("../vendor/tts/tts.js"), loaded.join(" "));
+  for (const rel of loaded) assert.ok(fs.existsSync(path.join(pageDir, rel)), `conversation/ loads ${rel}, which is missing`);
+  const pageHtml = fs.readFileSync(path.join(pageDir, "index.html"), "utf8");
+  for (const ref of pageHtml.matchAll(/(?:href|src)="(\.{1,2}\/[^"#?]+)/g)) {
+    assert.ok(fs.existsSync(path.join(pageDir, ref[1])), `conversation/index.html refers to ${ref[1]}, which is missing`);
+  }
+  const fontCss = fs.readFileSync(path.join(pageDir, "styles.css"), "utf8").match(/url\("(\.\.\/[^"]+)"\)/)[1];
+  assert.ok(fs.existsSync(path.join(pageDir, fontCss)), fontCss);
+  assert.match(fs.readFileSync(path.join(root, "tools", "build_dist.mjs"), "utf8"), /"conversation",/);
+  const landing = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  assert.match(landing, /href="\.\/conversation\/" class="btn lg talk-cta"/, "The landing page has a conversation button");
+  assert.match(landing, /href="\.\/conversation\/\?with=yours"/, "The studio opens a conversation with your own bot");
+  assert.match(fs.readFileSync(path.join(root, "sitemap.xml"), "utf8"), /https:\/\/bot\.computer\/conversation\//);
+  assert.match(fs.readFileSync(path.join(root, "THIRD-PARTY-NOTICES.md"), "utf8"), /stt_en_conformer_ctc_small[\s\S]*CC-BY-4\.0/);
 }
 
 console.log("✓ All bot.computer smoke tests passed!");

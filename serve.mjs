@@ -31,6 +31,15 @@ function makeServer() {
   return http.createServer((req, res) => {
     const urlObj = new URL(req.url || "/", "http://localhost");
     let rel = decodeURIComponent(urlObj.pathname);
+    // A folder asked for without its trailing slash (/conversation) goes to the folder, as hosts do,
+    // so the page's relative links resolve.
+    if (!rel.endsWith("/") && !path.extname(rel)) {
+      const dir = path.resolve(root, rel.replace(/^[/\\]+/, ""));
+      if (dir.startsWith(root + path.sep) && fs.existsSync(path.join(dir, "index.html"))) {
+        res.writeHead(301, { Location: `${rel}/${urlObj.search}` });
+        return res.end();
+      }
+    }
     if (rel.endsWith("/")) rel += "index.html";
     const safeRel = rel.replace(/^[/\\]+/, "");
     const filePath = path.resolve(root, safeRel);

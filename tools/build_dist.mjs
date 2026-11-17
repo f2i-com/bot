@@ -48,6 +48,7 @@ function copyRecursive(src, dest) {
 const siteFiles = [
   "index.html",
   "embed-demo.html",
+  "conversation", // the spoken conversation page: https://bot.computer/conversation/
   "styles.css",
   "favicon.svg",
   "favicon.ico",

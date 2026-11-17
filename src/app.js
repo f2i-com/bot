@@ -1198,7 +1198,23 @@ function syncAllAvatarControls() {
   $("customBgColorsWrap").classList.toggle("is-dimmed", bgLocked);
 }
 
+/** The studio's "Talk to ..." buttons name the bot they open a conversation with. */
+function syncTalkLinks() {
+  for (const el of document.querySelectorAll("[data-talk-name]")) el.textContent = state.name;
+}
+
+/** Saves the design now, so a conversation opened from the studio talks with what is on screen. */
+function saveStudioNow() {
+  clearTimeout(autosaveTimer);
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(snapshotStudio()));
+  } catch {
+    // Storage is blocked: the conversation page then offers the starting characters only.
+  }
+}
+
 function syncIdentityControls() {
+  syncTalkLinks();
   $("botNameInput").value = state.name;
   $("botRoleInput").value = state.role;
   $("botCompanyInput").value = state.company;
@@ -2934,9 +2950,11 @@ function bindStudioEvents() {
     state.greeting = $("botGreetingInput").value;
     state.chatEnabled = $("chatEnabledCheck").checked;
     state.baseBrain = $("baseBrainCheck").checked;
+    syncTalkLinks();
     rebuildStudioAiml();
     schedulePreviewSync();
   };
+  for (const link of document.querySelectorAll("[data-talk-link]")) link.addEventListener("click", saveStudioNow);
   for (const id of ["botNameInput", "botRoleInput", "botCompanyInput", "botGreetingInput", "chatEnabledCheck", "baseBrainCheck"]) {
     $(id).addEventListener("input", onIdentityChange);
   }
