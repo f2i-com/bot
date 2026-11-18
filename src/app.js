@@ -1,4 +1,5 @@
 import initTTS, { TTS, encodeWav } from "../vendor/tts/tts.js";
+import { LiveAvatar } from "./turntable/live-avatar.js";
 import {
   SKIN_TONES,
   HAIR_STYLES,
@@ -30,8 +31,10 @@ import {
   STARTER_AIML_PACKS,
   inspectAimlXml,
   appendAimlRule,
+  isShowcaseTarget,
   stripSpeechTags,
   parseSpeechCues,
+  replyDisplayText,
   captionForSpokenWord,
   BASE_AIML_XML,
   BOT_FACTS,
@@ -55,11 +58,13 @@ import {
   stylizeReply,
 } from "./persona.js";
 import { mountBotWidget } from "./embed-widget-core.js";
+import { embedRuntimeName } from "./embed-profile.js";
 import {
   slugifyBotName,
   buildSelfContainedBotJs,
   buildSelfContainedDemoHtml,
   generateEmbedSnippets,
+  pageGuideExamples,
   triggerBrowserDownload,
   downloadRawWasmFile,
   downloadEmbedRuntimeFile,
@@ -132,7 +137,8 @@ const VOICE_SLIDERS = [
   ["warmth", "Warmth", 0, 1, 0.01, ""],
   ["breathiness", "Breathiness", 0, 0.75, 0.01, ""],
   ["crispness", "Consonant crispness", 0.5, 1.55, 0.01, ""],
-  ["roughness", "Creak", 0, 0.65, 0.01, ""],
+  ["roughness", "Roughness", 0, 0.75, 0.01, ""],
+  ["creak", "Phrase-final vocal fry", 0, 1, 0.01, ""],
   ["chestResonance", "Chest resonance", 0, 1, 0.01, ""],
   ["room", "Room ambience", 0, 0.85, 0.01, ""],
   ["volume", "Volume", 0.2, 2.0, 0.02, ""],
@@ -178,9 +184,13 @@ const HAIR_PALETTE = ["#1b1d26", "#3c2734", "#5c3a28", "#8b4f32", "#c88d48", "#d
 const VOICE_PRESETS = [
   ["female", "Clear female"],
   ["bright", "Bright host"],
+  ["soft", "Soft and breathy"],
+  ["mellow", "Mellow"],
   ["male", "Natural male"],
   ["deep", "Deep and resonant"],
   ["husky", "Warm and husky"],
+  ["crisp", "Crisp announcer"],
+  ["elder", "Elder"],
   ["whisper", "Soft whisper"],
 ];
 
@@ -212,8 +222,11 @@ const state = {
   showSculptHandles: true,
   activeSculptId: "",
   hoverSculptId: "",
-  snippetMode: "self", // "self" | "multi" | "sdk"
+  snippetMode: "self", // One file, hosted embed, separate files, or JavaScript API
   embedOpts: {
+    speechEnabled: true,
+    allowVisitorCustomization: false,
+    renderMode: "3d",
     position: "bottom-right",
     size: "standard",
     eyeTracking: true,
@@ -245,9 +258,12 @@ function studioBotProps() {
 let ttsReady = false;
 let ttsFailed = false;
 const arcticCache = new Map();
+let studioVoiceRevision = 0;
 
 // Hero showcase runtime
 let heroPersonaIdx = 0;
+let heroLive = null;
+let heroMode = "3d";
 let heroVoice = null;
 let heroAiml = new AIMLEngine();
 const heroAnim = createAnimState();
@@ -259,12 +275,15 @@ let heroCaption = { words: [], labels: [], chunks: [], chunkIdx: -1, key: "" };
 let studioVoice = null;
 let studioAiml = new AIMLEngine();
 const studioAnim = createAnimState();
+let studioTurntable = null;
+let turntableVisible = false;
 const studioPointer = { nx: 0, ny: 0, active: false };
 const studioAudio = { ctx: null, src: null, speech: null, startAt: 0, playing: false, cueTimeline: null, silentCueStartMs: 0, anim: studioAnim };
 let previewWidgetHandle = null;
 let previewSyncTimer = 0;
 let previewMountSeq = 0;
 let currentSnippetCode = "";
+let embedSizes = {};
 let stageShapeBeforeCutout = "card";
 let savedVoiceSettings = null; // voice restored from autosave, applied once tts.wasm is ready
 
@@ -447,6 +466,30 @@ function scheduleAutosave() {
   }, 500);
 }
 
+function readStudioAvatar(input) {
+  const avatar = { ...DEFAULT_AVATAR };
+  for (const [key, fallback] of Object.entries(DEFAULT_AVATAR)) {
+    const value = input[key];
+    if (typeof value !== typeof fallback) continue;
+    if (typeof value === "boolean") {
+      avatar[key] = value;
+    } else if (typeof value === "string") {
+      if (fallback.startsWith("#") || key === "irisColor2" || key === "browColor") {
+        const hex = value.trim().replace(/^#/, "");
+        if (/^[a-f\d]{3}$/i.test(hex)) avatar[key] = "#" + [...hex].map(c => c + c).join("");
+        if (/^[a-f\d]{6}$/i.test(hex)) avatar[key] = "#" + hex;
+      } else if (value) avatar[key] = value;
+    }
+  }
+  for (const [key, , min, max] of [...BODY_SLIDERS, ...HEAD_SLIDERS, ...FEATURES_SLIDERS, ...SKIN_MATERIAL_SLIDERS, ...EXPRESSION_SLIDERS]) {
+    const raw = input[key];
+    if (typeof raw !== "number" && !(typeof raw === "string" && raw.trim())) continue;
+    const number = Number(raw);
+    if (Number.isFinite(number)) avatar[key] = Math.max(min, Math.min(max, number));
+  }
+  return avatar;
+}
+
 /** Applies a saved or imported configuration object to `state`. Returns false if it isn't usable. */
 function applyConfigObject(cfg) {
   if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) return false;
@@ -459,7 +502,7 @@ function applyConfigObject(cfg) {
   if (cfg.chatEnabled !== undefined) state.chatEnabled = Boolean(cfg.chatEnabled);
   state.baseBrain = cfg.baseBrain === undefined ? true : Boolean(cfg.baseBrain);
   state.facts = cleanFacts(cfg.facts);
-  if (cfg.avatar && typeof cfg.avatar === "object") state.avatar = { ...DEFAULT_AVATAR, ...cfg.avatar };
+  if (cfg.avatar && typeof cfg.avatar === "object" && !Array.isArray(cfg.avatar)) state.avatar = readStudioAvatar(cfg.avatar);
   if (typeof cfg.aimlXml === "string" && cfg.aimlXml.trim()) state.aimlXml = cfg.aimlXml;
   state.aimlPackId = typeof cfg.aimlPackId === "string" ? cfg.aimlPackId : "";
   state.activePresetId = typeof cfg.activePresetId === "string" ? cfg.activePresetId : "custom";
@@ -469,6 +512,9 @@ function applyConfigObject(cfg) {
   // Embed options are stored nested by autosave and flat by "Save config" / exported bots.
   const eo = cfg.embedOpts && typeof cfg.embedOpts === "object" ? cfg.embedOpts : cfg;
   const o = state.embedOpts;
+  o.allowVisitorCustomization = eo.allowVisitorCustomization === true;
+  o.speechEnabled = eo.speechEnabled !== false;
+  o.renderMode = eo.renderMode === "2d" ? "2d" : "3d";
   if (eo.position === "bottom-left" || eo.position === "bottom-right") o.position = eo.position;
   if (["compact", "standard", "large"].includes(eo.size)) o.size = eo.size;
   for (const key of ["eyeTracking", "showCaptions", "autoGreet", "chatStartOpen"]) {
@@ -722,29 +768,32 @@ async function playOnChannel(chan, voiceInst, rawText, { cues = null, cueWords =
 }
 
 async function loadArcticProfile(profileId) {
-  if (arcticCache.has(profileId)) return arcticCache.get(profileId);
-  const r = await fetch(`./vendor/tts/profiles/${profileId}.json`);
-  if (!r.ok) throw new Error(`Could not load ${profileId}`);
-  const data = await r.json();
-  arcticCache.set(profileId, data);
-  return data;
+  if (!arcticCache.has(profileId)) {
+    const pending = fetch(`./vendor/tts/profiles/${profileId}.json`).then(response => {
+      if (!response.ok) throw new Error(`Could not load ${profileId}`);
+      return response.json();
+    }).catch(error => {
+      arcticCache.delete(profileId);
+      throw error;
+    });
+    arcticCache.set(profileId, pending);
+  }
+  return arcticCache.get(profileId);
 }
 
-async function applyPresetVoiceToInstance(voiceInst, presetObj) {
-  if (!voiceInst) return;
-  if (presetObj.voicePreset && presetObj.voicePreset.startsWith("arctic_")) {
+async function applyPresetVoiceToInstance(voiceInst, presetObj, current) {
+  let profile = presetObj.voicePreset;
+  if (profile?.startsWith("arctic_")) {
     try {
-      const prof = await loadArcticProfile(presetObj.voicePreset);
-      voiceInst.configure(prof);
+      profile = await loadArcticProfile(profile);
     } catch {
-      voiceInst.configure(presetObj.voiceOverrides?.gender || "female");
+      profile = presetObj.voiceOverrides?.gender || "female";
     }
-  } else if (presetObj.voicePreset) {
-    voiceInst.configure(presetObj.voicePreset);
   }
-  if (presetObj.voiceOverrides) {
-    voiceInst.configure(presetObj.voiceOverrides);
-  }
+  if (!current()) return false;
+  if (profile) voiceInst.configure(profile);
+  if (presetObj.voiceOverrides) voiceInst.configure(presetObj.voiceOverrides);
+  return true;
 }
 
 function voiceUnavailableMessage() {
@@ -758,7 +807,7 @@ function voiceUnavailableMessage() {
 // ============================================================================
 
 function resetHeroSpeakUi() {
-  setBtn($("heroSpeakBtn"), { icon: "play", label: "Hear the greeting" });
+  setBtn($("heroSpeakBtn"), { icon: "play", label: "Hear greeting" });
   $("heroCaptionBubble").hidden = true;
   heroCaption.chunkIdx = -1;
   heroCaption.key = "";
@@ -773,6 +822,9 @@ async function selectHeroPersona(idx, speakGreeting = false) {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-pressed", String(on));
   }
+  $("heroShowcase").dataset.character = preset.id;
+  $("heroTalkBtn").href = `./conversation/?with=${encodeURIComponent(preset.id)}`;
+  heroAnim.bodyMotion = null;
   $("heroBotName").textContent = preset.name;
   $("heroBotRole").textContent = preset.role;
   $("heroChatInput").placeholder = `Ask ${preset.name} a question…`;
@@ -797,9 +849,8 @@ async function selectHeroPersona(idx, speakGreeting = false) {
   renderQuickChipBar($("heroQuickChips"), heroAiml.quickChips, (q) => askHeroBot(q));
 
   if (heroVoice) {
-    await applyPresetVoiceToInstance(heroVoice, preset);
-    // Ignore a stale selection if the visitor clicked another persona while the profile loaded.
-    if (speakGreeting && heroPersonaIdx === idx) {
+    const applied = await applyPresetVoiceToInstance(heroVoice, preset, () => heroAiml === warming);
+    if (speakGreeting && applied && heroAiml === warming) {
       speakHeroLine(preset.greeting, "wave");
     }
   }
@@ -917,7 +968,7 @@ function askHeroBot(question) {
   const engine = heroAiml;
   addChatBubble(log, "user", q);
   const res = engine.reply(q);
-  addChatBubble(log, "bot", res.displayText);
+  addChatBubble(log, "bot", replyDisplayText(res));
   renderQuickChipBar($("heroQuickChips"), res.chips.length ? res.chips : engine.quickChips, (nextQ) => askHeroBot(nextQ));
   unlockChannelAudio(heroAudio);
   afterPaint(() => {
@@ -935,34 +986,102 @@ function toggleHeroGreeting() {
   }
 }
 
+function portraitUrl(id, mode) {
+  const filename = id + (mode === "2d" ? "-2d" : "") + ".webp";
+  return new URL("../assets/presets/" + filename, import.meta.url).href;
+}
+
+function syncPortraits(container, mode) {
+  if (container.dataset.mode === mode) return;
+  container.dataset.mode = mode;
+  for (const button of container.querySelectorAll("[data-preset-id]")) {
+    button.querySelector("img").src = portraitUrl(button.dataset.presetId, mode);
+  }
+}
+
+function syncHeroMode() {
+  const canOrbit = heroMode === "3d" && heroLive.supported;
+  const mode = canOrbit ? "3d" : "2d";
+  for (const button of document.querySelectorAll("[data-hero-mode]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.heroMode === mode));
+    button.disabled = button.dataset.heroMode === "3d" && !heroLive.supported;
+    button.title = button.disabled ? "3D rendering is unavailable in this browser" : "";
+  }
+  $("heroOrbitHint").hidden = !canOrbit;
+  $("heroAvatarBox").classList.toggle("can-orbit", canOrbit);
+  $("heroAvatarBox").setAttribute("aria-label", canOrbit
+    ? "Play or stop the greeting. Drag or use the left and right arrow keys to rotate the avatar."
+    : "Play or stop the spoken greeting");
+  syncPortraits($("heroPersonaPills"), mode);
+}
+
 function initHeroSection() {
-  const heroPersonas = [0, 1, 2, 4]; // Aria, Marcus, Chloe, Nova-7
   const pillsHost = $("heroPersonaPills");
-  for (const presetIdx of heroPersonas) {
-    const p = AVATAR_PRESETS[presetIdx];
+  AVATAR_PRESETS.forEach((p, presetIdx) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "persona-pill";
     btn.dataset.presetIdx = String(presetIdx);
-    btn.textContent = p.name;
+    btn.dataset.presetId = p.id;
+    btn.title = p.name + " · " + p.role;
+    const thumb = document.createElement("img");
+    thumb.alt = "";
+    thumb.width = thumb.height = 36;
+    const name = document.createElement("span");
+    name.textContent = p.name;
+    btn.append(thumb, name);
     btn.onclick = () => selectHeroPersona(presetIdx, true);
     pillsHost.appendChild(btn);
+  });
+  for (const button of document.querySelectorAll("[data-hero-mode]")) {
+    button.onclick = () => { heroMode = button.dataset.heroMode; syncHeroMode(); };
   }
 
   selectHeroPersona(0, false);
 
   $("heroSpeakBtn").onclick = toggleHeroGreeting;
-  $("heroAvatarBox").onclick = toggleHeroGreeting;
-  $("heroAvatarBox").addEventListener("keydown", (e) => {
+  const box = $("heroAvatarBox");
+  let down = null;
+  let dragged = false;
+  box.addEventListener("pointerdown", event => {
+    if (!event.isPrimary) return;
+    down = { x: event.clientX, y: event.clientY };
+    dragged = false;
+  });
+  box.addEventListener("pointermove", event => {
+    if (down && event.isPrimary && heroMode === "3d" && heroLive?.supported && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) {
+      dragged = true;
+    }
+  });
+  for (const type of ["pointerup", "pointercancel"]) box.addEventListener(type, () => { down = null; });
+  box.onclick = () => { if (!dragged) toggleHeroGreeting(); };
+  box.addEventListener("keydown", (e) => {
+    if (heroMode === "3d" && heroLive?.supported && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault();
+      heroLive.rotateBy(e.key === "ArrowLeft" ? -Math.PI / 12 : Math.PI / 12);
+      return;
+    }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       toggleHeroGreeting();
     }
   });
 
-  $("heroWaveBtn").onclick = () => {
-    triggerAvatarEmote(heroAnim, "wave");
-  };
+  for (const button of document.querySelectorAll("[data-hero-action]")) {
+    button.onclick = () => triggerAvatarEmote(heroAnim, button.dataset.heroAction);
+  }
+  const chatToggle = $("heroChatToggle");
+  const chatPanel = $("heroChatPanel");
+  function showChat(open) {
+    chatPanel.hidden = !open;
+    chatToggle.setAttribute("aria-expanded", String(open));
+    if (open) $("heroChatInput").focus({ preventScroll: true });
+    else chatToggle.focus({ preventScroll: true });
+  }
+  chatToggle.onclick = () => showChat(chatPanel.hidden);
+  chatPanel.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") showChat(false);
+  });
 
   $("heroChatForm").onsubmit = (e) => {
     e.preventDefault();
@@ -1079,6 +1198,7 @@ function buildVoiceSliders() {
     input.addEventListener("input", () => {
       if (!studioVoice) return;
       const v = Number(input.value);
+      studioVoiceRevision++;
       studioVoice.configure({ [key]: v });
       $(`val_vc_${key}`).textContent = formatSliderVal(v, step, unit);
       schedulePreviewSync();
@@ -1241,6 +1361,9 @@ function syncEmbedControls() {
   const o = state.embedOpts;
   $("embedPositionSelect").value = o.position;
   $("embedSizeSelect").value = o.size;
+  $("embedRenderMode").value = o.renderMode;
+  $("embedSpeechEnabled").checked = o.speechEnabled;
+  $("embedVisitorCustomize").checked = o.allowVisitorCustomization;
   $("embedEyeTrackCheck").checked = o.eyeTracking;
   $("embedCaptionsCheck").checked = o.showCaptions;
   $("embedAutoGreetCheck").checked = o.autoGreet;
@@ -1289,6 +1412,7 @@ function commitAvatarChange() {
 }
 
 async function applyStudioPreset(preset, speakAfter = false) {
+  const revision = ++studioVoiceRevision;
   state.activePresetId = preset.id;
   state.name = preset.name;
   state.role = preset.role;
@@ -1298,14 +1422,15 @@ async function applyStudioPreset(preset, speakAfter = false) {
   state.persona = normalizePersona(preset.persona);
   $("auditionText").value = preset.greeting;
 
-  if (studioVoice) {
-    await applyPresetVoiceToInstance(studioVoice, preset);
-    syncVoiceControls();
-  }
   syncAllAvatarControls();
   syncIdentityControls();
   rebuildStudioAiml();
   syncPersonaControls();
+  if (studioVoice) {
+    await applyPresetVoiceToInstance(studioVoice, preset, () => revision === studioVoiceRevision);
+    if (revision !== studioVoiceRevision) return;
+    syncVoiceControls();
+  }
   schedulePreviewSync();
 
   if (speakAfter) {
@@ -1389,6 +1514,94 @@ function setupDesignerCanvasSculpting() {
       state.hoverSculptId = "";
       hud.hidden = true;
     }
+  });
+}
+
+function drawStudioTurntable(nowMs, force = false) {
+  studioTurntable.render(state.avatar, studioAnim, nowMs, { force });
+}
+
+function setupStudioTurntable() {
+  const flat = $("studio2dBtn");
+  const orbit = $("studio3dBtn");
+  const canvas = $("turntableCanvas");
+  const angles = $("turntableView");
+  function showTurntable(visible) {
+    if (visible && !studioTurntable) {
+      studioTurntable = new LiveAvatar(canvas, $("designerCanvas"), { orbitControls: true, view: angles.value });
+    }
+    if (visible && !studioTurntable.supported) {
+      orbit.disabled = true;
+      orbit.title = "3D rendering is unavailable in this browser";
+      visible = false;
+    }
+    turntableVisible = visible;
+    canvas.hidden = !visible;
+    $("designerCanvas").style.pointerEvents = visible ? "none" : "";
+    $("designerCanvas").setAttribute("aria-hidden", String(visible));
+    if (visible) drawStudioTurntable(performance.now(), true);
+    flat.classList.toggle("active", !visible);
+    flat.setAttribute("aria-pressed", String(!visible));
+    orbit.classList.toggle("active", visible);
+    orbit.setAttribute("aria-pressed", String(visible));
+    angles.hidden = !visible;
+    syncPortraits($("studioPresetStrip"), visible ? "3d" : "2d");
+    $("fullFramingDetail").textContent = visible ? " body" : " torso";
+    $("turntableHint").hidden = !visible;
+    $("toggleSculptBtn").hidden = visible;
+    $("sculptHintBar").hidden = visible || !state.showSculptHandles;
+    $("sculptLiveHud").hidden = true;
+    state.hoverSculptId = "";
+  }
+  // Wait until the editor approaches the viewport before allocating its WebGL context.
+  const observer = typeof IntersectionObserver === "function" ? new IntersectionObserver((entries) => {
+    if (entries.some(entry => entry.isIntersecting)) {
+      observer.disconnect();
+      showTurntable(true);
+    }
+  }, { rootMargin: "80px" }) : null;
+  observer?.observe($("stageColumn"));
+  flat.onclick = () => { observer?.disconnect(); showTurntable(false); };
+  orbit.onclick = () => { observer?.disconnect(); showTurntable(true); };
+  angles.onchange = () => studioTurntable.setView(angles.value);
+  canvas.addEventListener("webglcontextlost", () => {
+    orbit.disabled = true;
+    orbit.title = "3D rendering is unavailable in this browser";
+    if (turntableVisible) {
+      showTurntable(false);
+      toast("3D rendering was interrupted. The 2D sculpt is available.");
+    }
+  });
+  canvas.addEventListener("webglcontextrestored", () => {
+    orbit.disabled = false;
+    orbit.removeAttribute("title");
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (event.buttons === 1) angles.value = "";
+  });
+  $("saveTurntableView").onclick = () => {
+    let image = canvas;
+    let view = angles.value || "orbit";
+    const now = performance.now();
+    if (turntableVisible) {
+      drawStudioTurntable(now, true);
+    } else {
+      const preview = $("designerCanvas");
+      image = document.createElement("canvas");
+      image.width = preview.width;
+      image.height = preview.height;
+      drawBotAvatar(image.getContext("2d"), image.width, image.height,
+        { ...state.avatar, bgStyle: "transparent" }, studioAnim, now, { showVoiceWaves: false });
+      view = "2d";
+    }
+    const filename = `${slugifyBotName(state.name)}-${view}.png`;
+    image.toBlob((blob) => {
+      if (blob) triggerBrowserDownload(filename, blob);
+      else toast("Could not save this view.", { error: true });
+    }, "image/png");
+  };
+  window.addEventListener("pagehide", (event) => {
+    if (!event.persisted) studioTurntable?.dispose();
   });
 }
 
@@ -1594,6 +1807,7 @@ function generateBot() {
     });
   }
   if (want.voice && studioVoice) {
+    studioVoiceRevision++;
     studioVoice.randomize({ gender: vGender });
     if (character) {
       // And so does its pace: a calm character speaks a little slower, a lively one with more lilt.
@@ -1892,6 +2106,7 @@ function renderRuleInsights(info) {
     warnHost.appendChild(li);
   }
   if (!info.valid) return; // the last good list stays up while the XML is being fixed
+  renderShowcaseExamples(pageGuideExamples(info.rules));
 
   $("aimlRuleCount").textContent = String(info.rules.length);
   const list = $("aimlRuleList");
@@ -1913,6 +2128,14 @@ function renderRuleInsights(info) {
     preview.textContent =
       context + (rule.aliasOf ? `Same answer as “${rule.aliasOf.toLowerCase()}”` : rule.preview || "(no spoken text)");
     text.append(pattern, preview);
+    if (rule.showcases.length) {
+      const destination = document.createElement("small");
+      destination.className = "rule-destinations";
+      destination.textContent = rule.tours.length
+        ? rule.tours.map(targets => "Tour · " + targets.join(" → ")).join(" / ")
+        : "Shows " + rule.showcases.join(", ");
+      text.append(destination);
+    }
 
     const actions = document.createElement("div");
     actions.className = "rule-actions";
@@ -1947,6 +2170,51 @@ function renderRuleInsights(info) {
 
     li.append(text, actions);
     list.appendChild(li);
+  }
+}
+
+function renderShowcaseExamples(examples) {
+  const host = $("mockGuideTargets");
+  const key = JSON.stringify(examples);
+  host.hidden = !examples.length || !state.chatEnabled;
+  $("installGuide").hidden = host.hidden;
+  // Keep the selected element attached when unrelated avatar or voice settings change.
+  if (host.dataset.examples === key) return;
+  host.dataset.examples = key;
+  host.replaceChildren();
+  const list = $("installGuideList");
+  list.replaceChildren();
+  for (const { target, question, tourQuestions = [] } of examples) {
+    const attr = `data-bot-showcase="${target}"`;
+    const card = document.createElement("section");
+    card.dataset.botShowcase = target;
+    card.setAttribute("aria-label", target);
+    const name = document.createElement("strong");
+    name.textContent = target;
+    card.append(name);
+    for (const query of [question, ...tourQuestions].filter(Boolean)) {
+      const test = document.createElement("button");
+      test.type = "button";
+      test.className = "btn xs";
+      test.textContent = `Ask “${query}”`;
+      test.onclick = () => previewWidgetHandle?.ask(query);
+      card.append(test);
+    }
+    host.append(card);
+    const item = document.createElement("li");
+    const code = document.createElement("code");
+    code.textContent = attr;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "btn xs";
+    copy.textContent = "Copy";
+    copy.setAttribute("aria-label", "Copy attribute for " + target);
+    copy.onclick = async () => {
+      const copied = await copyText(attr);
+      toast(copied ? "Copied page attribute" : "Select the attribute to copy it manually.", { error: !copied });
+    };
+    item.append(code, copy);
+    list.append(item);
   }
 }
 
@@ -2012,10 +2280,14 @@ function askStudioBot(question) {
   const engine = studioAiml;
   addChatBubble(log, "user", q);
   const res = engine.reply(q);
-  addChatBubble(log, "bot", res.displayText, describeMatch(res));
+  const match = describeMatch(res);
+  const route = res.tour.length ? "Tour · " + res.tour.map(stop => stop.target).join(" → ") : res.showcase && "Shows " + res.showcase;
+  addChatBubble(log, "bot", replyDisplayText(res), route ? match + " · " + route : match);
   renderQuickChipBar($("studioChatChips"), res.chips.length ? res.chips : engine.quickChips, (nextQ) => askStudioBot(nextQ));
   unlockChannelAudio(studioAudio);
-  afterPaint(() => speakStudioLine(res.speechText, "", { cues: res.cues, cueWords: res.cueWords }));
+  afterPaint(() => {
+    if (engine === studioAiml) speakStudioLine(res.speechText, "", { cues: res.cues, cueWords: res.cueWords });
+  });
 }
 
 function resetStudioChat() {
@@ -2040,6 +2312,9 @@ function getFullBotExportConfig() {
     facts: { ...state.facts },
     position: state.embedOpts.position,
     size: state.embedOpts.size,
+    renderMode: state.embedOpts.renderMode,
+    speechEnabled: state.embedOpts.speechEnabled,
+    allowVisitorCustomization: state.embedOpts.allowVisitorCustomization,
     eyeTracking: state.embedOpts.eyeTracking,
     showCaptions: state.embedOpts.showCaptions,
     autoGreet: state.embedOpts.autoGreet,
@@ -2080,17 +2355,39 @@ function highlightSnippet(code) {
 
 function updateEmbedSnippetsUI() {
   const cfg = getFullBotExportConfig();
-  const { slug, selfContainedHtml, multiFileHtml, sdkJs } = generateEmbedSnippets(cfg);
+  $("embedChatEnabled").checked = cfg.chatEnabled;
+  $("embedBaseBrain").checked = cfg.baseBrain;
+  $("embedBaseBrain").disabled = !cfg.chatEnabled;
+  $("embedStartOpenCheck").disabled = !cfg.chatEnabled;
+  const size = embedSizes[embedRuntimeName(cfg)];
+  const voiceHint = cfg.speechEnabled === false ? "Speech engine omitted."
+    : state.snippetMode === "self" ? "Includes the voice in the downloaded file." : "Voice downloads on first use.";
+  $("embedSizeHint").textContent = (size ? `Runtime ${Math.ceil(size.bytes / 1024)} KiB (${Math.ceil(size.gzip / 1024)} KiB gzipped). ` : "") + voiceHint;
+  const studioBase = new URL("../", import.meta.url);
+  const { slug, selfContainedHtml, hostedHtml, multiFileHtml, sdkJs } = generateEmbedSnippets(cfg, studioBase);
   $("selfContainedFilenameLabel").textContent = `${slug}-bot.js`;
+  $("installBrainFilename").textContent = `${slug}-brain.aiml`;
   $("mockSiteBrand").textContent = state.company || "bot.computer";
   $("mockUrlDisplay").textContent = formatPreviewSiteUrl(state.company);
-
-  currentSnippetCode =
-    state.snippetMode === "multi"
-      ? multiFileHtml
-      : state.snippetMode === "sdk"
-        ? sdkJs
-        : selfContainedHtml;
+  $("tryVisitorCustomize").hidden = !cfg.allowVisitorCustomization;
+  $("mockVisitorHint").textContent = cfg.allowVisitorCustomization
+    ? "Open Customize on the avatar to try a visitor’s look. Restore the original look whenever you like."
+    : "Try the controls on the avatar to see what visitors will experience.";
+  const installs = {
+    self: [selfContainedHtml, "Save the bot script next to your HTML file. Paste the tag below before your closing body tag."],
+    hosted: [hostedHtml, `Paste this tag into your HTML. It loads your selected runtime from ${studioBase.host}.`],
+    multi: [multiFileHtml, "Upload the files shown below beside your HTML page and paste the tag into the page." + (cfg.chatEnabled ? " You can edit the AIML file after installation." : "")],
+    sdk: [sdkJs, `Paste this example into your page to mount the bot from JavaScript using the selected runtime on ${studioBase.host}.`],
+  };
+  const [code, help] = installs[state.snippetMode];
+  const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(studioBase.hostname);
+  const usesHost = state.snippetMode === "hosted" || state.snippetMode === "sdk";
+  $("embedInstallHelp").textContent = help + (usesHost && localHost ? " For a public site, use a publicly hosted studio or the One file download." : "");
+  $("singleFileDownloads").hidden = state.snippetMode !== "self";
+  $("multiFileDownloads").hidden = state.snippetMode !== "multi";
+  $("dlRawWasmBtn").hidden = !cfg.speechEnabled;
+  $("dlAimlOnlyBtn").hidden = !cfg.chatEnabled;
+  currentSnippetCode = code;
   $("embedCodeOutput").innerHTML = highlightSnippet(currentSnippetCode);
 }
 
@@ -2116,7 +2413,7 @@ async function mountOrRefreshPreviewWidget(forceRemount = false) {
     container: $("mockWebpage"),
     wasmUrl: "./vendor/tts/tts.wasm",
     autoGreet: false, // don't speak over the studio on page load
-  });
+  }, { preview: true });
   if (seq !== previewMountSeq) {
     handle.destroy(); // a newer remount started while this one was loading
     return;
@@ -2159,7 +2456,7 @@ function startRenderLoop() {
           heroPointer.active = true;
         }
       }
-      const dc = $("designerCanvas");
+      const dc = $(turntableVisible ? "turntableCanvas" : "designerCanvas");
       if (dc) {
         const r = dc.getBoundingClientRect();
         if (r.width > 0 && r.bottom > 0 && r.top < window.innerHeight) {
@@ -2173,7 +2470,14 @@ function startRenderLoop() {
   );
 
   const heroCanvas = $("heroCanvas");
-  const heroCtx = heroCanvas.getContext("2d");
+  heroLive = new LiveAvatar($("hero3dCanvas"), heroCanvas, { orbitControls: true, view: "portrait" });
+  syncHeroMode();
+  for (const type of ["webglcontextlost", "webglcontextrestored"]) {
+    $("hero3dCanvas").addEventListener(type, syncHeroMode);
+  }
+  window.addEventListener("pagehide", event => {
+    if (!event.persisted) heroLive.dispose();
+  });
   const desCanvas = $("designerCanvas");
   const desCtx = desCanvas.getContext("2d");
   const ipaBadge = $("heroIpaBadge");
@@ -2205,8 +2509,15 @@ function startRenderLoop() {
         }
         const heroPreset = AVATAR_PRESETS[heroPersonaIdx] || AVATAR_PRESETS[0];
         stepAvatarPhysics(heroAnim, nowMs, sampledHero, heroPointer, heroVoice?.settings.pitchHz || 180);
-        drawBotAvatar(heroCtx, hw, hh, heroPreset.avatar, heroAnim, nowMs, {
-          showVoiceWaves: true,
+        const movement = heroAnim.bodyMotion;
+        const performing = movement && nowMs < movement.end && movement.id !== "wave";
+        heroLive.render(heroPreset.avatar, heroAnim, nowMs, {
+          renderMode: heroMode,
+          framing: performing ? "full" : "half",
+          transparent: true,
+          contactShadow: true,
+          smoothFraming: true,
+          showVoiceWaves: false,
         });
 
         heroScope.push(nowMs, heroAnim);
@@ -2229,9 +2540,11 @@ function startRenderLoop() {
 
       // 2. Studio designer canvas
       const desRect = desCanvas.getBoundingClientRect();
-      if (desRect.width > 0 && desRect.height > 0) {
-        const dw = Math.max(220, Math.floor(desRect.width * ratio));
-        const dh = Math.max(220, Math.floor(desRect.height * ratio));
+      const stageOnScreen = desRect.bottom > -50 && desRect.top < window.innerHeight + 50;
+      if (desRect.width > 0 && desRect.height > 0 && (stageOnScreen || studioAudio.playing || studioAudio.silentCueStartMs)) {
+        const minSize = turntableVisible ? 1 : 220;
+        const dw = Math.max(minSize, Math.floor(desRect.width * ratio));
+        const dh = Math.max(minSize, Math.floor(desRect.height * ratio));
         if (desCanvas.width !== dw || desCanvas.height !== dh) {
           desCanvas.width = dw;
           desCanvas.height = dh;
@@ -2247,12 +2560,16 @@ function startRenderLoop() {
         // The avatar holds still while a sculpt handle is being used.
         studioAnim.idleLife = !(state.activeSculptId || state.hoverSculptId);
         stepAvatarPhysics(studioAnim, nowMs, sampledStudio, studioPointer, studioVoice?.settings.pitchHz || 160);
-        drawBotAvatar(desCtx, dw, dh, state.avatar, studioAnim, nowMs, {
-          showVoiceWaves: true,
-          showSculptHandles: state.showSculptHandles,
-          activeSculptId: state.activeSculptId,
-          hoverSculptId: state.hoverSculptId,
-        });
+        if (turntableVisible) {
+          drawStudioTurntable(nowMs);
+        } else {
+          drawBotAvatar(desCtx, dw, dh, state.avatar, studioAnim, nowMs, {
+            showVoiceWaves: true,
+            showSculptHandles: state.showSculptHandles,
+            activeSculptId: state.activeSculptId,
+            hoverSculptId: state.hoverSculptId,
+          });
+        }
 
         // Live articulation traces + word / phoneme / pitch badges
         studioScope.push(nowMs, studioAnim);
@@ -2298,23 +2615,20 @@ function makeChoicePill(label, dataset, onClick, title = "") {
 }
 
 function populateStaticChoices() {
-  // Starter characters, each with a small rendered portrait
   const strip = $("studioPresetStrip");
-  const thumbAnim = createAnimState();
   for (const p of AVATAR_PRESETS) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "archetype-card";
     btn.dataset.presetId = p.id;
 
-    const thumb = document.createElement("canvas");
+    const thumb = document.createElement("img");
     thumb.className = "archetype-thumb";
-    thumb.width = 92;
-    thumb.height = 92;
-    thumb.setAttribute("aria-hidden", "true");
-    try {
-      drawBotAvatar(thumb.getContext("2d"), 92, 92, { ...p.avatar, framing: "bust", stageShape: "circle" }, thumbAnim, 4000, {});
-    } catch {}
+    thumb.width = 72;
+    thumb.height = 72;
+    thumb.alt = "";
+    thumb.decoding = "async";
+    thumb.src = portraitUrl(p.id, "2d");
 
     const text = document.createElement("span");
     text.className = "archetype-text";
@@ -2489,6 +2803,7 @@ function populateStaticChoices() {
     $("voicePresetPills").appendChild(
       makeChoicePill(label, { voiceId: id }, () => {
         if (!studioVoice) return setStudioStatus(voiceUnavailableMessage());
+        studioVoiceRevision++;
         studioVoice.configure(id);
         state.voiceBaseId = id;
         syncVoiceControls();
@@ -2501,10 +2816,13 @@ function populateStaticChoices() {
     $("voiceArcticPills").appendChild(
       makeChoicePill(label, { voiceId: id }, async () => {
         if (!studioVoice) return setStudioStatus(voiceUnavailableMessage());
+        const revision = ++studioVoiceRevision;
         try {
           const prof = await loadArcticProfile(id);
+          if (revision !== studioVoiceRevision) return;
           studioVoice.configure(prof);
         } catch (err) {
+          if (revision !== studioVoiceRevision) return;
           toast(`Could not load that speaker profile: ${err.message}`, { error: true });
           return;
         }
@@ -2710,8 +3028,11 @@ function bindStudioEvents() {
   };
 
   $("mobileScriptToggleBtn").onclick = () => {
-    const open = $("stageColumn").classList.toggle("show-mobile-script");
-    setBtn($("mobileScriptToggleBtn"), { icon: open ? "x" : "pencil", label: open ? "Close" : "Script" });
+    const open = $("studioAuditionPanel").hidden;
+    $("studioAuditionPanel").hidden = !open;
+    $("stageColumn").classList.toggle("audition-open", open);
+    $("mobileScriptToggleBtn").setAttribute("aria-expanded", String(open));
+    $("mobileQuickSpeakBtn").hidden = open;
   };
 
   // Body quick builds
@@ -2808,6 +3129,7 @@ function bindStudioEvents() {
   for (const btn of $("voiceGenderSeg").querySelectorAll("button")) {
     btn.onclick = () => {
       if (!studioVoice) return setStudioStatus(voiceUnavailableMessage());
+      studioVoiceRevision++;
       studioVoice.setGender(btn.dataset.vgender);
       state.voiceBaseId = "";
       syncVoiceControls();
@@ -2818,6 +3140,7 @@ function bindStudioEvents() {
   for (const btn of $("glottalSourceSeg").querySelectorAll("button")) {
     btn.onclick = () => {
       if (!studioVoice) return setStudioStatus(voiceUnavailableMessage());
+      studioVoiceRevision++;
       studioVoice.configure({ folds: btn.dataset.folds === "true" });
       syncVoiceControls();
       schedulePreviewSync();
@@ -2825,6 +3148,7 @@ function bindStudioEvents() {
   }
   $("voiceWhisperCheck").onchange = (e) => {
     if (!studioVoice) return;
+    studioVoiceRevision++;
     studioVoice.configure({ whisper: e.target.checked });
     syncVoiceControls();
     schedulePreviewSync();
@@ -2832,6 +3156,7 @@ function bindStudioEvents() {
   $("randomVoiceOnlyBtn").onclick = () => {
     if (!studioVoice) return setStudioStatus(voiceUnavailableMessage());
     const g = studioVoice.settings.gender;
+    studioVoiceRevision++;
     studioVoice.randomize({ gender: g });
     state.voiceBaseId = "";
     syncVoiceControls();
@@ -2879,10 +3204,19 @@ function bindStudioEvents() {
 
   // Randomize, save / load config, start over
   $("randomizeAllBtn").onclick = generateBot;
-  // The generator's menu closes when you click anywhere else.
-  document.addEventListener("pointerdown", (e) => {
-    const menu = $("generatorMenu");
-    if (menu.open && !menu.contains(e.target)) menu.open = false;
+  for (const menu of [$("generatorMenu"), $("studioFileMenu")]) {
+    document.addEventListener("pointerdown", event => {
+      if (menu.open && !menu.contains(event.target)) menu.open = false;
+    });
+    menu.addEventListener("keydown", event => {
+      if (event.key === "Escape" && menu.open) {
+        menu.open = false;
+        menu.querySelector("summary").focus();
+      }
+    });
+  }
+  $("studioFileMenu").addEventListener("click", event => {
+    if (event.target.closest("button")) $("studioFileMenu").open = false;
   });
   $("savePresetJsonBtn").onclick = () => {
     const json = JSON.stringify({ ...getFullBotExportConfig(), voiceTuning: VOICE_TUNING }, null, 2);
@@ -2898,6 +3232,7 @@ function bindStudioEvents() {
     try {
       const parsed = JSON.parse(await file.text());
       if (!applyConfigObject(parsed)) throw new Error("the file is not a bot configuration");
+      studioVoiceRevision++;
       if (parsed.voice && typeof parsed.voice === "object") {
         const voice = retuneSavedVoice(parsed.voice, parsed);
         if (studioVoice) studioVoice.configure(voice);
@@ -2928,6 +3263,9 @@ function bindStudioEvents() {
     state.aimlPackId = "concierge";
     state.aimlXml = STARTER_AIML_PACKS.concierge.xml;
     Object.assign(state.embedOpts, {
+      speechEnabled: true,
+      allowVisitorCustomization: false,
+      renderMode: "3d",
       position: "bottom-right",
       size: "standard",
       eyeTracking: true,
@@ -2970,22 +3308,135 @@ function bindStudioEvents() {
     schedulePreviewSync();
   });
 
+  const firstStop = $("qaFirstStop");
+  const extraStops = $("qaTourStops");
+  const guideEditor = $("qaGuideOptions");
+  const allStops = () => [firstStop, ...extraStops.children];
+  const stopFields = row => row === firstStop
+    ? { target: $("qaShowcaseInput"), answer: $("qaAnswerInput"), emote: $("qaEmoteSelect") }
+    : { target: row.querySelector('[name="target"]'), answer: row.querySelector('[name="answer"]'), emote: row.querySelector('[name="emote"]') };
+
+  function updateTourForm() {
+    const rows = allStops();
+    const multi = rows.length > 1;
+    guideEditor.classList.toggle("has-tour", multi);
+    firstStop.querySelector("legend").hidden = !multi;
+    firstStop.querySelector(".qa-stop-actions").hidden = !multi;
+    $("qaAnswerLabel").textContent = multi ? "Explanation" : "The bot answers";
+    $("qaGestureLabel").textContent = multi ? "Gesture" : "Opening gesture";
+    const fields = $("qaReplyFields");
+    const palette = $("qaTourPalette");
+    const paletteToggle = $("qaTourPaletteToggle");
+    paletteToggle.hidden = !multi;
+    if (multi && fields.parentElement !== firstStop) {
+      paletteToggle.before(fields);
+      palette.append($("qaActionBar"), $("qaSoundBar"));
+    } else if (!multi && fields.parentElement === firstStop) {
+      guideEditor.before(fields, $("qaActionBar"), $("qaSoundBar"));
+      palette.hidden = true;
+      paletteToggle.setAttribute("aria-expanded", "false");
+    }
+    $("qaShowcaseInput").setCustomValidity("");
+    const example = $("qaShowcaseInput").value.trim();
+    $("qaShowcaseAttr").textContent = `data-bot-showcase="${isShowcaseTarget(example) ? example : "pricing"}"`;
+    rows.forEach((row, index) => {
+      row.querySelector("legend").textContent = `Stop ${index + 1}`;
+      for (const button of row.querySelectorAll("[data-step-action]")) {
+        const action = button.dataset.stepAction;
+        button.disabled = action === "down" && index === rows.length - 1;
+        button.setAttribute("aria-label", action === "remove" ? `Remove stop ${index + 1}` : `Move stop ${index + 1} ${action}`);
+      }
+    });
+  }
+
+  $("qaAddTourStop").onclick = () => {
+    const row = $("qaTourStopTemplate").content.firstElementChild.cloneNode(true);
+    const fields = stopFields(row);
+    for (const option of $("qaEmoteSelect").options) fields.emote.add(option.cloneNode(true));
+    extraStops.append(row);
+    updateTourForm();
+    fields.target.focus();
+  };
+  $("qaTourPaletteToggle").onclick = event => {
+    const palette = $("qaTourPalette");
+    palette.hidden = !palette.hidden;
+    event.currentTarget.setAttribute("aria-expanded", String(!palette.hidden));
+  };
+  guideEditor.addEventListener("click", event => {
+    const button = event.target.closest("[data-step-action]");
+    if (!button) return;
+    const rows = allStops();
+    const row = button.closest("fieldset");
+    const index = rows.indexOf(row);
+    const action = button.dataset.stepAction;
+    const other = rows[action === "up" ? index - 1 : index + 1];
+    const current = stopFields(row);
+    if (action === "remove" && row !== firstStop) {
+      row.remove();
+      stopFields(other || rows[index - 1]).target.focus();
+    } else if (other) {
+      // The first stop shares the ordinary Q&A fields. Swapping the data keeps
+      // its labels, gesture chips and editor keyboard shortcuts in place.
+      const adjacent = stopFields(other);
+      for (const name of ["target", "answer", "emote"]) {
+        const value = current[name].value;
+        current[name].value = adjacent[name].value;
+        adjacent[name].value = value;
+      }
+      current.target.setCustomValidity("");
+      adjacent.target.setCustomValidity("");
+      if (action === "remove") {
+        other.remove();
+        current.target.focus();
+      } else {
+        adjacent.target.focus();
+      }
+    }
+    updateTourForm();
+  });
+  guideEditor.addEventListener("input", event => {
+    if (event.target === $("qaShowcaseInput")) updateTourForm();
+    else if (event.target.name === "target") event.target.setCustomValidity("");
+  });
   const addQaRule = () => {
     const pattern = $("qaPatternInput").value.trim();
     const answer = $("qaAnswerInput").value.trim();
-    if (!pattern || !answer) {
-      toast(pattern ? "Add the answer the bot should give" : "Add what the visitor says first", { error: true });
+    const targetField = $("qaShowcaseInput");
+    const showcase = targetField.value.trim();
+    const rows = allStops();
+    const tour = [];
+    for (const row of rows) {
+      const fields = stopFields(row);
+      const target = fields.target.value.trim();
+      if ((target || rows.length > 1) && !isShowcaseTarget(target)) {
+        guideEditor.open = true;
+        fields.target.setCustomValidity(target
+          ? "Start with a letter and use only letters, digits, hyphens or underscores."
+          : "Enter the ID or named target for this stop.");
+        fields.target.reportValidity();
+        return;
+      }
+      if (rows.length > 1) tour.push({ target, answer: fields.answer.value.trim(), emote: fields.emote.value });
+    }
+    if (!pattern || (!answer && !showcase)) {
+      toast(pattern ? "Add an answer or choose a page target" : "Add what the visitor says first", { error: true });
       (pattern ? $("qaAnswerInput") : $("qaPatternInput")).focus();
       return;
     }
     const chips = $("qaChipsInput").value.split(",").map((s) => s.trim()).filter(Boolean);
     const emote = $("qaEmoteSelect").value;
-    state.aimlXml = appendAimlRule(state.aimlXml, { pattern, answer, chips, emote });
+    state.aimlXml = appendAimlRule(state.aimlXml, tour.length
+      ? { pattern, chips, tour }
+      : { pattern, answer, chips, emote, showcase });
     state.aimlPackId = "";
     syncIdentityControls();
     $("qaPatternInput").value = "";
     $("qaAnswerInput").value = "";
     $("qaChipsInput").value = "";
+    targetField.value = "";
+    $("qaEmoteSelect").value = "";
+    extraStops.replaceChildren();
+    updateTourForm();
     const info = rebuildStudioAiml();
     schedulePreviewSync();
     const editor = $("aimlXmlEditor");
@@ -2995,14 +3446,12 @@ function bindStudioEvents() {
     });
   };
   $("addQaRuleBtn").onclick = addQaRule;
-  for (const id of ["qaPatternInput", "qaAnswerInput", "qaChipsInput"]) {
-    $(id).addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        addQaRule();
-      }
-    });
-  }
+  $("addQaRuleBtn").closest(".control-block").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing && e.target instanceof HTMLInputElement) {
+      e.preventDefault();
+      addQaRule();
+    }
+  });
 
   $("importAimlBtn").onclick = () => $("importAimlFileInput").click();
   $("importAimlFileInput").onchange = async (e) => {
@@ -3045,27 +3494,40 @@ function bindStudioEvents() {
   }
 
   $("remountPreviewBtn").onclick = () => mountOrRefreshPreviewWidget(true);
+  $("tryVisitorCustomize").onclick = async () => {
+    if (!previewWidgetHandle) await mountOrRefreshPreviewWidget();
+    if (previewWidgetHandle?.openCustomizer()) {
+      $("mockWebpage").scrollIntoView({ block: "center" });
+    }
+  };
 
-  const onEmbedOptChange = () => {
+  const onEmbedOptChange = (event) => {
+    if (["embedChatEnabled", "embedBaseBrain"].includes(event.target.id)) {
+      state.chatEnabled = $("embedChatEnabled").checked;
+      state.baseBrain = $("embedBaseBrain").checked;
+      syncIdentityControls();
+      rebuildStudioAiml();
+    }
+    state.embedOpts.speechEnabled = $("embedSpeechEnabled").checked;
     state.embedOpts.position = $("embedPositionSelect").value;
     state.embedOpts.size = $("embedSizeSelect").value;
+    state.embedOpts.renderMode = $("embedRenderMode").value;
+    state.embedOpts.allowVisitorCustomization = $("embedVisitorCustomize").checked;
     state.embedOpts.eyeTracking = $("embedEyeTrackCheck").checked;
     state.embedOpts.showCaptions = $("embedCaptionsCheck").checked;
     state.embedOpts.autoGreet = $("embedAutoGreetCheck").checked;
     state.embedOpts.chatStartOpen = $("embedStartOpenCheck").checked;
-    schedulePreviewSync(true);
+    schedulePreviewSync(["embedSpeechEnabled", "embedPositionSelect", "embedSizeSelect", "embedStartOpenCheck"].includes(event.target.id));
   };
-  for (const id of ["embedPositionSelect", "embedSizeSelect", "embedEyeTrackCheck", "embedCaptionsCheck", "embedAutoGreetCheck", "embedStartOpenCheck"]) {
+  for (const id of ["embedSpeechEnabled", "embedChatEnabled", "embedBaseBrain", "embedVisitorCustomize", "embedRenderMode", "embedPositionSelect", "embedSizeSelect", "embedEyeTrackCheck", "embedCaptionsCheck", "embedAutoGreetCheck", "embedStartOpenCheck"]) {
     $(id).addEventListener("change", onEmbedOptChange);
   }
 
-  for (const btn of $("snippetModeSeg").querySelectorAll("button")) {
-    btn.onclick = () => {
-      state.snippetMode = btn.dataset.snip;
-      setSegActive($("snippetModeSeg"), (b) => b === btn);
-      updateEmbedSnippetsUI();
-    };
-  }
+  $("embedInstallMethod").onchange = (event) => {
+    state.snippetMode = event.target.value;
+    $("exportStatusText").hidden = true;
+    updateEmbedSnippetsUI();
+  };
 
   let copyResetTimer = 0;
   $("copySnippetBtn").onclick = async () => {
@@ -3077,7 +3539,7 @@ function bindStudioEvents() {
       setBtn(btn, { icon: "check", label: "Copied" });
       copyResetTimer = setTimeout(() => {
         btn.classList.remove("is-done");
-        setBtn(btn, { icon: "copy", label: "Copy" });
+        setBtn(btn, { icon: "copy", label: "Copy code" });
       }, 1600);
     } else {
       toast("Copy was blocked by the browser. Select the code and copy it manually.", { error: true, ms: 4500 });
@@ -3132,7 +3594,7 @@ function bindStudioEvents() {
       toast(`Could not download ${label}: ${err.message}`, { error: true, ms: 4500 });
     }
   };
-  $("dlEmbedRuntimeBtn").onclick = guardedDownload(downloadEmbedRuntimeFile, "bot-embed.js");
+  $("dlEmbedRuntimeBtn").onclick = guardedDownload(() => downloadEmbedRuntimeFile("./embed/" + embedRuntimeName(getFullBotExportConfig())), "bot-embed.js");
   $("dlRawWasmBtn").onclick = guardedDownload(downloadRawWasmFile, "tts.wasm");
 }
 
@@ -3141,6 +3603,10 @@ function bindStudioEvents() {
 // ============================================================================
 
 async function boot() {
+  fetch(new URL("../embed/sizes.json", import.meta.url)).then(response => response.ok ? response.json() : {}).then(sizes => {
+    embedSizes = sizes;
+    updateEmbedSnippetsUI();
+  }).catch(() => {});
   applyTheme(document.documentElement.getAttribute("data-theme") || "auto", false);
   restoreSavedStudio();
 
@@ -3149,6 +3615,7 @@ async function boot() {
   initHeroSection();
   studioScope = new VoiceScope($("studioScopeCanvas"), ["jaw", "tongue", "lips", "nasal", "voice"], { lanes: true });
   setupDesignerCanvasSculpting();
+  setupStudioTurntable();
   setupTabsAndNav();
   bindStudioEvents();
 
@@ -3168,7 +3635,9 @@ async function boot() {
     await initTTS();
     heroVoice = new TTS("female");
     studioVoice = new TTS("female");
-    await applyPresetVoiceToInstance(heroVoice, AVATAR_PRESETS[heroPersonaIdx] || AVATAR_PRESETS[0]);
+    const initialBrain = heroAiml;
+    const revision = studioVoiceRevision;
+    const heroReady = applyPresetVoiceToInstance(heroVoice, AVATAR_PRESETS[heroPersonaIdx] || AVATAR_PRESETS[0], () => heroAiml === initialBrain);
 
     let restoredVoice = false;
     if (savedVoiceSettings) {
@@ -3181,9 +3650,10 @@ async function boot() {
     }
     if (!restoredVoice) {
       const preset = AVATAR_PRESETS.find((p) => p.id === state.activePresetId) || AVATAR_PRESETS[0];
-      await applyPresetVoiceToInstance(studioVoice, preset);
-      state.voiceBaseId = preset.voicePreset || "";
+      await applyPresetVoiceToInstance(studioVoice, preset, () => revision === studioVoiceRevision);
+      if (revision === studioVoiceRevision) state.voiceBaseId = preset.voicePreset || "";
     }
+    await heroReady;
     savedVoiceSettings = null;
 
     ttsReady = true;

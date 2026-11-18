@@ -10,7 +10,7 @@
 // You can talk with one of the starting characters, or with the bot you designed in the studio.
 
 import initTTS, { TTS } from "../vendor/tts/tts.js";
-import { AIMLEngine, BASE_AIML_XML, STARTER_AIML_PACKS, parseSpeechCues, stripSpeechTags } from "../src/aiml-engine.js";
+import { AIMLEngine, BASE_AIML_XML, STARTER_AIML_PACKS, parseSpeechCues, replyDisplayText, stripSpeechTags } from "../src/aiml-engine.js";
 import {
   createAnimState,
   setAvatarMood,
@@ -20,8 +20,8 @@ import {
   runDueCues,
   sampleSpeechAt,
   stepAvatarPhysics,
-  drawBotAvatar,
 } from "../src/avatar-renderer.js";
+import { LiveAvatar } from "../src/turntable/live-avatar.js";
 import { YOURS, STUDIO_KEY, presetCharacters, readStudioDesign, studioCharacter, alignCaption, paginate } from "./talk.js";
 
 /** How long to wait after a phrase for you to carry on before answering, in ms. */
@@ -33,6 +33,7 @@ const UNSURE_BELOW = 0.6;
 /** About how big stt.wasm is, for the progress shown when the server does not say. */
 const STT_BYTES_GUESS = 14_000_000;
 const PREFS_KEY = "bot.computer/talk/v1";
+const CHAT_KEY = "bot.computer/talk/session/v1";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -41,8 +42,9 @@ const els = {
   designText: $("designText"),
   soundBtn: $("soundBtn"),
   settingsBtn: $("settingsBtn"),
-  stage: $("stage"),
+  interruptBtn: $("interruptBtn"),
   avatarCanvas: $("avatarCanvas"),
+  avatar3dCanvas: $("avatar3dCanvas"),
   caption: $("caption"),
   voiceLine: $("voiceLine"),
   talkBtn: $("talkBtn"),
@@ -101,16 +103,20 @@ function savePrefs() {
 let STT = null;
 let stt = null; // speech recognition; listen() runs its own copy in a Web Worker
 let session = null; // the open microphone
+let micRequest = 0;
 let voice = null; // the character's TTS voice
 let brain = null; // the character's AIML engine
 let characters = []; // who you can talk with: your own bot (if you made one) and the starting six
 let character = null; // the one you are talking with
 let anim = null; // the avatar's animation state
+let avatarStage = null;
 let audioCtx = null;
 let playback = null; // what the character is saying right now
+let replyChips = null;
 let characterSeq = 0;
 
 const live = {
+  voice: "loading", // the text conversation also works while the voice loads or if it is unavailable
   stt: "loading", // speech recognition: "loading" | "ready" | "failed"
   sttProgress: 0,
   mic: "off", // "off" | "starting" | "on"
@@ -155,22 +161,29 @@ async function fetchWithProgress(url, onProgress) {
 }
 
 async function boot() {
-  try {
-    await initTTS();
-  } catch (err) {
-    console.error(err);
-    setStatus("The voice could not be loaded. Reload the page to try again.");
-    return;
-  }
   anim = createAnimState();
+  avatarStage = new LiveAvatar(els.avatar3dCanvas, els.avatarCanvas);
   setupControls();
   rebuildCharacterList();
   await selectCharacter(firstCharacterId(), { greet: false });
-  // You can type straight away; the talk button waits for speech recognition (14 MB) to arrive.
+  restoreConversation();
   for (const el of [els.characterSelect, els.typeInput, els.sendBtn]) el.disabled = false;
   render();
   requestAnimationFrame(tick);
+  loadVoiceEngine();
   loadRecognizer();
+}
+
+async function loadVoiceEngine() {
+  try {
+    await initTTS();
+    live.voice = "ready";
+    await loadCharacterVoice(character, characterSeq);
+  } catch (err) {
+    console.warn("[conversation] the voice could not be loaded:", err);
+    live.voice = "failed";
+  }
+  render();
 }
 
 async function loadRecognizer() {
@@ -277,6 +290,12 @@ async function makeVoice(c) {
   return v;
 }
 
+async function loadCharacterVoice(next, seq) {
+  const nextVoice = await makeVoice(next);
+  if (seq !== characterSeq) nextVoice.free();
+  else voice = nextVoice;
+}
+
 /**
  * Switches to a character. With `refresh` it is the same character with changes made in the
  * studio, so the conversation, and what it remembers about you, carry on.
@@ -284,17 +303,13 @@ async function makeVoice(c) {
 async function selectCharacter(id, { greet = true, refresh = false } = {}) {
   const seq = ++characterSeq;
   const next = characters.find((c) => c.id === id) || characters.find((c) => c.id === "aria") || characters[0];
-  const nextVoice = await makeVoice(next);
-  if (seq !== characterSeq) {
-    nextVoice.free();
-    return;
-  }
   const switching = Boolean(character) && character.id !== next.id;
   finishPlayback(true);
   const memory = refresh && brain ? brain.exportSession() : null;
   if (voice) voice.free();
-  voice = nextVoice;
+  voice = null;
   character = next;
+  if (switching) anim = createAnimState();
   const made = makeBrain(next);
   brain = made.engine;
   if (memory) brain.importSession(memory);
@@ -303,14 +318,15 @@ async function selectCharacter(id, { greet = true, refresh = false } = {}) {
   els.characterSelect.value = next.id;
   document.title = `Talk with ${next.name} on bot.computer`;
   setAvatarMood(anim, restingMood());
-  if (!refresh) renderSuggestions(brain.quickChips);
+  if (!refresh) renderSuggestions();
   syncCharacterControls();
   render();
   if (switching && els.script.querySelector(".turn")) addNote(`Now talking with ${next.name}.`);
   if (made.rulesError && next.own && !refresh) {
     addNote(`Your rules have an XML error (${made.rulesError}), so ${next.name} only knows small talk for now. Fix it in the studio and it updates here.`);
   }
-  if (greet) {
+  if (live.voice === "ready") await loadCharacterVoice(next, seq);
+  if (greet && seq === characterSeq) {
     live.greeted = true;
     await characterSpeaksLine(next.greeting);
   }
@@ -323,7 +339,7 @@ function syncCharacterControls() {
   els.designLink.title = own ? `Change ${character.name} in the studio` : "Design your own bot in the studio, then talk with it here";
   els.packSelect.disabled = own;
   els.packHint.hidden = !own;
-  els.packHint.textContent = own ? `${character.name} answers with the rules you wrote in the studio, on top of everyday small talk.` : "";
+  els.packHint.textContent = own ? `${character.name} uses the rules you saved in the studio.` : "";
   try {
     const url = new URL(location.href);
     url.searchParams.set("with", character.id);
@@ -373,7 +389,7 @@ function characterSpeaks(speechText, cues, cueWords, displayText) {
   return new Promise((resolve) => {
     finishPlayback(true);
     const audible = Boolean(stripSpeechTags(speechText)) || cues.some((c) => c.sound);
-    const ctx = prefs.sound && audible ? audio() : null;
+    const ctx = prefs.sound && voice && audible ? audio() : null;
     let speech = null;
     if (ctx && voice) {
       try {
@@ -405,15 +421,18 @@ function characterSpeaks(speechText, cues, cueWords, displayText) {
       source.start(playback.startAt);
     } else {
       const labels = String(displayText || "").split(/\s+/).filter(Boolean);
+      const timeline = estimateCueTimeline(cues);
+      const lastCueMs = (timeline.items.at(-1)?.t || 0) * 1000;
+      const holdMs = Math.max(clamp(500 + labels.length * 330, 900, 9000), lastCueMs + 350);
       playback = {
         kind: "silent",
         startMs: performance.now(),
-        timeline: estimateCueTimeline(cues),
+        timeline,
         labels,
         pages: [labels.map((_, i) => i)],
         captionKey: "",
         resolve,
-        timer: setTimeout(() => finishPlayback(false), clamp(500 + labels.length * 330, 900, 9000)),
+        timer: setTimeout(() => finishPlayback(false), holdMs),
       };
     }
     render();
@@ -495,23 +514,32 @@ function micErrorText(err) {
 
 async function startListening() {
   if (live.mic !== "off" || !stt) return;
+  const request = ++micRequest;
   live.mic = "starting";
   live.note = "";
   render();
   const ctx = audio(); // created inside the click, so it is allowed to start
   try {
-    session = await stt.listen({
+    const opened = await stt.listen({
       audioContext: ctx || undefined,
       mode: "dictation",
-      onPhrase: heardPhrase,
-      onSpeaking: heardSpeaking,
+      onPhrase: phrase => { if (request === micRequest) heardPhrase(phrase); },
+      onSpeaking: speaking => { if (request === micRequest) heardSpeaking(speaking); },
       onLevel: ({ levelDb, floorDb }) => {
+        if (request !== micRequest) return;
         live.levelDb = levelDb;
         live.floorDb = floorDb;
       },
       onError: (err) => console.warn("[conversation] recognizer:", err),
     });
+    if (request !== micRequest) {
+      // Permission can arrive after navigation or cancellation. Release that stream.
+      await opened.stop();
+      return;
+    }
+    session = opened;
   } catch (err) {
+    if (request !== micRequest) return;
     session = null;
     live.mic = "off";
     live.note = micErrorText(err);
@@ -528,7 +556,7 @@ async function startListening() {
 }
 
 async function stopListening() {
-  if (!session) return;
+  ++micRequest;
   const s = session;
   session = null;
   live.mic = "off";
@@ -536,13 +564,11 @@ async function stopListening() {
   clearTimeout(live.turnTimer);
   dropDraft();
   render();
-  live.discarding = true;
   try {
-    await s.stop();
+    await s?.stop();
   } catch {
     // the microphone is closed either way
   }
-  live.discarding = false;
   render();
 }
 
@@ -658,11 +684,11 @@ async function respondTo(text) {
     console.error("[conversation] the brain failed on", JSON.stringify(text), err);
   }
   live.thinking = false;
-  if (reply && reply.displayText) {
+  if (reply && (reply.displayText || reply.cues.length)) {
     const el = addTurn("bot", character.name);
-    el.querySelector(".words").textContent = reply.displayText;
+    el.querySelector(".words").textContent = replyDisplayText(reply);
     addDetail(el, describeMatch(reply));
-    renderSuggestions(reply.chips && reply.chips.length ? reply.chips : brain.quickChips);
+    renderSuggestions(reply.chips.length ? reply.chips : undefined);
     render();
     await characterSpeaks(reply.speechText, reply.cues, reply.cueWords, reply.displayText);
   }
@@ -672,7 +698,7 @@ async function respondTo(text) {
 function sendTyped(text, shownAs) {
   const words = String(text || "").trim();
   if (!words || !brain) return;
-  audio(); // inside the click or key press, so the voice is allowed to play
+  if (prefs.sound && live.voice !== "failed") audio(); // unlock sound inside the gesture
   dropDraft();
   const el = addTurn("you", "You");
   el.querySelector(".words").textContent = shownAs || words;
@@ -743,6 +769,66 @@ function addNote(text) {
   els.script.scrollTop = els.script.scrollHeight;
 }
 
+// Keep the current tab's conversation when a visitor goes to the studio or reloads.
+// Save text and confidence marks only. The microphone, audio and animations start idle.
+function saveConversation() {
+  if (!brain || !character) return;
+  try {
+    const lines = [...els.script.querySelectorAll(".turn:not(.draft), .note")].slice(-40).map(li => {
+      if (li.classList.contains("note")) return { note: li.textContent };
+      const words = [...li.querySelector(".words").childNodes].map(node => node.nodeType === Node.TEXT_NODE
+        ? node.textContent : { word: node.textContent, confidence: node.title });
+      return { who: li.classList.contains("you") ? "you" : "bot", name: li.querySelector(".who").textContent,
+        words, detail: li.querySelector(".detail")?.textContent };
+    });
+    if (!lines.length) {
+      sessionStorage.removeItem(CHAT_KEY);
+      return;
+    }
+    const snapshot = { character: character.id, pack: prefs.pack, lines, chips: replyChips, greeted: live.greeted, memory: brain.exportSession() };
+    sessionStorage.setItem(CHAT_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Text chat also works with browser storage turned off.
+  }
+}
+
+function restoreConversation() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(CHAT_KEY) || "null");
+    if (!saved || saved.character !== character.id || !Array.isArray(saved.lines)) return;
+    brain.importSession(saved.memory);
+    live.greeted = saved.greeted === true;
+    for (const line of saved.lines.slice(-40)) {
+      if (typeof line?.note === "string") {
+        addNote(line.note);
+        continue;
+      }
+      if (!["bot", "you"].includes(line?.who) || typeof line.name !== "string" || !Array.isArray(line.words)) continue;
+      const li = addTurn(line.who, line.name);
+      const words = li.querySelector(".words");
+      for (const part of line.words) {
+        if (typeof part === "string") words.append(part);
+        else if (typeof part?.word === "string") words.append(unsureWord(part.word, part.confidence));
+      }
+      if (line.detail) addDetail(li, line.detail);
+    }
+    if ((character.own || saved.pack === prefs.pack) && Array.isArray(saved.chips)) {
+      renderSuggestions(saved.chips.filter(chip => typeof chip?.label === "string" && typeof chip.query === "string"));
+    }
+    els.script.scrollTop = els.script.scrollHeight;
+  } catch {
+    // An unavailable or invalid snapshot starts a fresh conversation.
+  }
+}
+
+function unsureWord(word, confidence) {
+  const span = document.createElement("span");
+  span.className = "unsure";
+  span.textContent = word;
+  span.title = confidence || "";
+  return span;
+}
+
 function renderUserWords(li, phrases) {
   const el = li.querySelector(".words");
   el.replaceChildren();
@@ -756,11 +842,7 @@ function renderUserWords(li, phrases) {
     words.forEach((w, i) => {
       if (i) el.append(" ");
       if (w.confidence < UNSURE_BELOW) {
-        const span = document.createElement("span");
-        span.className = "unsure";
-        span.textContent = w.word;
-        span.title = `${Math.round(w.confidence * 100)}% sure`;
-        el.append(span);
+        el.append(unsureWord(w.word, `${Math.round(w.confidence * 100)}% sure`));
       } else {
         el.append(w.word);
       }
@@ -771,8 +853,13 @@ function renderUserWords(li, phrases) {
 }
 
 function renderSuggestions(chips) {
+  replyChips = chips || null;
+  const focused = document.activeElement;
+  const restoreFocus = els.suggestions.contains(focused) && focused.matches(":focus-visible");
   els.suggestions.replaceChildren();
-  const list = (chips || []).slice(0, 4);
+  const list = (chips || brain.quickChips).slice(0, 4);
+  const moves = "What moves can you do?";
+  if (!chips && character.baseBrain && !list.includes(moves)) list.unshift(moves);
   if (!list.length) return;
   const lead = document.createElement("span");
   lead.className = "lead";
@@ -786,6 +873,10 @@ function renderSuggestions(chips) {
     btn.textContent = label;
     btn.onclick = () => sendTyped(query, label);
     els.suggestions.append(btn);
+  }
+  if (restoreFocus) {
+    const buttons = [...els.suggestions.querySelectorAll("button")];
+    (buttons.find(btn => btn.textContent === focused.textContent) || buttons[0]).focus({ preventScroll: true });
   }
 }
 
@@ -802,7 +893,8 @@ function render() {
   const name = character ? character.name : "The character";
   if (playback) {
     const how = touchScreen.matches ? `Tap ${name} to interrupt.` : `Click ${name} or press Esc to interrupt.`;
-    setStatus(`${name} is talking. ${how}`, "bot");
+    const doing = playback.kind === "voice" ? "is talking" : "is replying";
+    setStatus(`${name} ${doing}. ${how}`, "bot");
   } else if (live.thinking) setStatus("Thinking…", "bot");
   else if (live.mic === "starting") setStatus("Opening the microphone…");
   else if (live.mic === "on" && (live.userSpeaking || live.draft)) setStatus("Hearing you…", "you");
@@ -814,13 +906,20 @@ function render() {
         ? "Getting speech recognition ready…"
         : `Loading speech recognition, ${Math.round(live.sttProgress * 100)}%. You can type while it loads.`
     );
-  } else setStatus("The microphone is off. Press Start talking, or type below.");
+  } else if (live.voice === "failed") setStatus("Voice output is unavailable. You can still chat by voice or text.");
+  else setStatus("The microphone is off. Press Start talking, or type below.");
 
   els.talkBtn.classList.toggle("on", live.mic !== "off");
-  els.talkLabel.textContent = live.mic === "off" ? "Start talking" : live.mic === "starting" ? "Opening…" : "Stop listening";
-  els.talkBtn.disabled = live.stt !== "ready" || live.mic === "starting";
-  els.stage.classList.toggle("can-interrupt", Boolean(playback));
-  els.stage.title = playback ? `Click to interrupt ${name}` : "";
+  els.talkLabel.textContent = live.mic === "off" ? "Start talking" : live.mic === "starting" ? "Cancel" : "Stop listening";
+  els.talkBtn.disabled = live.stt !== "ready";
+  els.interruptBtn.hidden = !playback;
+  els.interruptBtn.setAttribute("aria-label", `Interrupt ${name}`);
+  els.soundBtn.disabled = live.voice === "failed";
+  const soundOn = prefs.sound && !els.soundBtn.disabled;
+  const soundLabel = els.soundBtn.disabled ? "Voice unavailable" : soundOn ? "Sound on" : "Sound off";
+  els.soundBtn.setAttribute("aria-pressed", String(soundOn));
+  els.soundBtn.title = soundLabel;
+  $("soundText").textContent = soundLabel;
 }
 
 function setupControls() {
@@ -837,7 +936,7 @@ function setupControls() {
     const memory = brain.exportSession();
     brain = makeBrain(character).engine;
     brain.importSession(memory);
-    renderSuggestions(brain.quickChips);
+    renderSuggestions();
   };
 
   const applyHang = () => {
@@ -873,16 +972,11 @@ function setupControls() {
     savePrefs();
   };
 
-  const syncSound = () => {
-    $("soundText").textContent = prefs.sound ? "Sound on" : "Sound off";
-    els.soundBtn.setAttribute("aria-pressed", String(prefs.sound));
-  };
-  syncSound();
   els.soundBtn.onclick = () => {
     prefs.sound = !prefs.sound;
     savePrefs();
-    syncSound();
     if (!prefs.sound && playback && playback.kind === "voice") finishPlayback(true);
+    render();
   };
 
   els.settingsBtn.onclick = () => els.settingsDialog.showModal();
@@ -891,7 +985,8 @@ function setupControls() {
     dropDraft();
     els.script.replaceChildren(els.intro);
     brain.resetSession();
-    renderSuggestions(brain.quickChips);
+    renderSuggestions();
+    saveConversation();
   };
 
   els.talkBtn.onclick = () => (live.mic === "off" ? startListening() : stopListening());
@@ -901,7 +996,7 @@ function setupControls() {
     els.typeInput.value = "";
     sendTyped(text);
   };
-  els.stage.onclick = () => finishPlayback(true);
+  els.interruptBtn.onclick = () => finishPlayback(true);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && playback && !els.settingsDialog.open) finishPlayback(true);
   });
@@ -911,7 +1006,14 @@ function setupControls() {
     if (e.key === STUDIO_KEY || e.key === null) studioChanged();
   });
   // Leaving the page closes the microphone.
-  window.addEventListener("pagehide", () => stopListening());
+  window.addEventListener("pagehide", (event) => {
+    saveConversation();
+    stopListening();
+    if (!event.persisted) avatarStage.dispose();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveConversation();
+  });
 }
 
 // ---- Drawing ----------------------------------------------------------------------------------
@@ -927,8 +1029,7 @@ function readColors() {
 }
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
 
-/** Sizes a canvas to its box and returns a context that draws in CSS pixels. */
-function fitCanvas(canvas) {
+function sizeCanvas(canvas) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
@@ -938,9 +1039,7 @@ function fitCanvas(canvas) {
     canvas.width = pw;
     canvas.height = ph;
   }
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  return { ctx, w, h };
+  return { dpr, w, h };
 }
 
 function drawVoiceLine(level, who) {
@@ -948,7 +1047,9 @@ function drawVoiceLine(level, who) {
   lineWho.copyWithin(0, 1);
   lineLevel[LINE - 1] = level;
   lineWho[LINE - 1] = who;
-  const { ctx, w, h } = fitCanvas(els.voiceLine);
+  const { dpr, w, h } = sizeCanvas(els.voiceLine);
+  const ctx = els.voiceLine.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (!colors) readColors();
   ctx.clearRect(0, 0, w, h);
   const step = w / LINE;
@@ -983,8 +1084,13 @@ function tick(nowMs) {
 
   const gaze = live.userSpeaking || live.draft || live.thinking ? lookAtYou : pointer.active ? pointer : null;
   stepAvatarPhysics(anim, nowMs, sampled, gaze, pitchHz());
-  const stage = fitCanvas(els.avatarCanvas);
-  drawBotAvatar(stage.ctx, stage.w, stage.h, character.avatar, anim, nowMs, {});
+  sizeCanvas(els.avatarCanvas);
+  const movement = anim.bodyMotion;
+  const showFeet = movement && movement.id !== "wave" && nowMs < movement.end && character.avatar.framing !== "cutout";
+  avatarStage.render(character.avatar, anim, nowMs, {
+    framing: showFeet ? "full" : character.avatar.framing,
+    smoothFraming: true,
+  });
 
   const listening = Boolean(session) && live.mic === "on" && !session.paused && !p;
   const yourLevel = listening ? clamp((live.levelDb - live.floorDb - 4) / 30, 0, 1) : 0;

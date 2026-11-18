@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sample site with an embedded companion · bot.computer</title>
-  <meta name="description" content="A sample page showing a bot.computer speaking companion embedded with one script tag.">
+  <title>Try a guided page with Aria · bot.computer</title>
+  <meta name="description" content="Ask an embedded bot.computer avatar about pricing or changing its look and follow it to the answer on this sample page.">
   <meta name="robots" content="noindex, follow">
   <link rel="icon" href="./favicon.ico" sizes="32x32">
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
@@ -17,15 +17,21 @@
       font-display: swap;
       src: url("./vendor/fonts/bricolage-grotesque-latin-wght.woff2") format("woff2");
     }
+    @font-face {
+      font-family: "Instrument Serif";
+      font-style: italic;
+      font-display: swap;
+      src: url("./vendor/fonts/instrument-serif-latin-italic.woff2") format("woff2");
+    }
     :root {
       color-scheme: light;
-      --bg: #f3f5f9;
+      --bg: #f7f7f2;
       --card: #ffffff;
-      --ink: #0d1322;
-      --ink-soft: #3b4660;
-      --muted: #5f6880;
-      --line: #dbe1ec;
-      --accent: #1a5fe6;
+      --ink: #19221f;
+      --ink-soft: #475249;
+      --muted: #626d65;
+      --line: #d7ddd3;
+      --accent: #3549ca;
       --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     * { box-sizing: border-box; }
@@ -42,7 +48,7 @@
     header {
       border-bottom: 1px solid var(--line);
       background: var(--card);
-      padding: 14px 24px;
+      padding: 16px max(24px, calc((100% - 1100px) / 2));
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -58,29 +64,36 @@
     .brand span { color: var(--muted); font-weight: 500; }
     .back-link { font-weight: 600; font-size: 14px; }
     main {
-      max-width: 880px;
+      max-width: 1148px;
       margin: 0 auto;
-      padding: 64px 24px 240px;
+      padding: 0 24px 80px;
+    }
+    .introduction {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(260px, .75fr);
+      align-items: center;
+      gap: clamp(24px, 5vw, 70px);
+      padding: clamp(46px, 7vw, 90px) 0;
     }
     h1 {
-      margin: 0 0 16px;
+      margin: 0 0 18px;
       font-family: var(--display);
-      font-size: clamp(30px, 5.4vw, 50px);
-      line-height: 1.04;
-      letter-spacing: -0.035em;
+      font-size: clamp(46px, 6.8vw, 78px);
+      line-height: 1.01;
+      letter-spacing: -0.058em;
       text-wrap: balance;
     }
+    h1 em { display: block; color: var(--accent); font: italic 1.13em/.98 "Instrument Serif", Georgia, serif; letter-spacing: -.045em; }
     p.lead {
       font-size: 18px;
       color: var(--ink-soft);
-      max-width: 62ch;
-      margin: 0 0 28px;
+      max-width: 46ch;
+      margin: 0;
     }
     .demo-triggers {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-bottom: 44px;
     }
     .demo-btn {
       padding: 11px 17px;
@@ -96,12 +109,44 @@
       transition: background 0.14s ease, border-color 0.14s ease;
     }
     .demo-btn:hover { background: #f7f9fc; border-color: var(--muted); }
-    .demo-btn.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #ffffff;
+    .question-list {
+      padding: clamp(14px, 2vw, 22px);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
     }
-    .demo-btn.primary:hover { background: #124bc0; border-color: #124bc0; }
+    .question-list h2 {
+      display: flex; align-items: center; gap: 10px;
+      margin: 0 0 14px;
+      font: 650 19px/1.15 var(--display);
+    }
+    .question-list img { width: 40px; height: 40px; background: #e2def7; border-radius: 50%; }
+    .question-list .demo-btn {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      width: 100%; padding: 13px 0; text-align: left;
+      border: 0; border-radius: 0; border-top: 1px solid var(--line); box-shadow: none;
+      background: transparent; color: var(--accent);
+    }
+    .question-list .demo-btn::after {
+      content: ""; width: 7px; height: 7px; flex: none; margin-right: 4px;
+      border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: rotate(45deg);
+    }
+    .question-list .demo-btn:hover { color: #222c8b; text-decoration: underline; }
+    .question-list .demo-btn:last-child { padding-bottom: 4px; }
+    .guide-section {
+      border-top: 1px solid var(--line);
+      padding: clamp(24px, 4.2vw, 52px) 0;
+      display: grid;
+      grid-template-columns: minmax(160px, .7fr) minmax(0, 1.3fr);
+      gap: 12px clamp(20px, 5vw, 70px);
+      align-items: start;
+    }
+    .guide-section h2 { margin: 0; font: 650 clamp(25px, 3vw, 36px)/1.1 var(--display); letter-spacing: -.04em; }
+    .guide-section p { margin: 0; max-width: 46ch; color: var(--ink-soft); }
+    .price { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; margin-bottom: 8px; }
+    .price strong { font: 650 clamp(42px, 5vw, 64px)/1 var(--display); letter-spacing: -.065em; }
+    .price span { color: var(--ink-soft); }
+    .guide-section .demo-btn { margin-top: 16px; }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -129,26 +174,67 @@
       text-align: center;
     }
     footer a { font-weight: 600; }
+    @media (max-width: 650px) {
+      header { padding: 12px 18px; gap: 4px 8px; }
+      .brand { font-size: 17px; }
+      .back-link { font-size: 12px; }
+      main { padding-inline: 18px; }
+      .introduction { display: block; padding: 28px 0; }
+      h1 { font-size: clamp(36px, 11.4vw, 52px); margin-bottom: 12px; }
+      .question-list { padding: 0; margin-top: 16px; border-radius: 0; background: transparent; border: 0; }
+      .question-list h2 { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
+      .question-list .demo-btn { padding-block: 10px; }
+      .question-list .demo-btn:last-child { padding-bottom: 10px; }
+      .guide-section { grid-template-columns: 1fr; }
+      p.lead { font-size: 16px; }
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="brand">AcmeCloud <span>sample site</span></div>
-    <a class="back-link" href="./index.html">Back to the bot.computer studio</a>
+    <a class="back-link" href="./index.html">Back to studio</a>
   </header>
 
   <main>
-    <h1>A speaking companion, embedded with one script tag.</h1>
-    <p class="lead">
-      Look at the bottom-right corner. <strong>Aria</strong> is mounted from <code>./embed/bot-embed.js</code> inside an isolated Shadow DOM. She follows your cursor, speaks 24&nbsp;kHz audio synthesized by <code>tts.wasm</code> in this tab, and answers questions from an AIML brain.
-    </p>
+    <section class="introduction" aria-labelledby="intro-title">
+      <div>
+        <h1 id="intro-title">Let Aria <em>show you around.</em></h1>
+        <p class="lead">Ask Aria a question and she’ll guide you to the answer on this page. Open <strong>Ask</strong> on her avatar to type your own.</p>
+      </div>
+      <div class="question-list" role="group" aria-labelledby="questions-title">
+        <h2 id="questions-title"><img src="./assets/presets/aria.webp" width="40" height="40" alt="">Ask Aria</h2>
+        <button type="button" class="demo-btn" id="trigAskTour">Take me on a tour</button>
+        <button type="button" class="demo-btn" id="trigAskPrice">Show me pricing</button>
+        <button type="button" class="demo-btn" id="trigAskLook">Where can I change your look?</button>
+      </div>
+    </section>
 
-    <div class="demo-triggers">
-      <button type="button" class="demo-btn primary" id="trigPitch">Have her pitch the product</button>
-      <button type="button" class="demo-btn" id="trigAskPrice">Ask about pricing</button>
-      <button type="button" class="demo-btn" id="trigSing">Make her sing</button>
-      <button type="button" class="demo-btn" id="trigPersona">Change her personality</button>
-    </div>
+    <section class="guide-section" id="pricing" data-bot-showcase="pricing" aria-labelledby="pricing-title">
+      <h2 id="pricing-title">Hosting &amp; pricing</h2>
+      <div>
+        <div class="price"><strong>$0</strong><span>per minute of speech</span></div>
+        <p>The companion synthesizes speech on the visitor’s device. You host the files on your own site and cover your usual web hosting costs.</p>
+      </div>
+    </section>
+
+    <section class="guide-section" aria-labelledby="appearance-title">
+      <h2 id="appearance-title">Aria’s appearance</h2>
+      <div>
+        <p>Try a different hairstyle, outfit or pair of glasses. Aria remembers the look you choose in this browser.</p>
+        <button type="button" class="demo-btn" id="customizeAria" data-bot-showcase="customize">Customize Aria</button>
+      </div>
+    </section>
+
+    <section class="guide-section" data-bot-showcase="abilities" aria-labelledby="abilities-title">
+      <h2 id="abilities-title">Voice &amp; movement</h2>
+      <div class="demo-triggers">
+        <button type="button" class="demo-btn" id="trigMotion">What moves can you do?</button>
+        <button type="button" class="demo-btn" id="trigSing">Make her sing</button>
+        <button type="button" class="demo-btn" id="trigPersona">Change her personality</button>
+      </div>
+    </section>
 
     <div class="grid">
       <div class="card">
@@ -167,21 +253,62 @@
   </main>
 
   <footer>
-    <a href="https://bot.computer">bot.computer</a>, a project by <a href="https://f2i.com" target="_blank" rel="noopener">f2i.com</a>
+    <a href="./">bot.computer</a>, a project by <a href="https://f2i.com" target="_blank" rel="noopener">f2i.com</a>
   </footer>
 
   <!-- Standalone bot.computer embed SDK -->
   <script src="./embed/bot-embed.js" data-manual="true"></script>
+  <script type="application/aiml+xml" id="guideRules">
+    <aiml version="2.0">
+      <chips>
+        <chip>Take me on a tour</chip>
+        <chip>Show me pricing</chip>
+        <chip>Where can I change your look?</chip>
+        <chip>What moves can you do?</chip>
+      </chips>
+      <category>
+        <pattern>TAKE ME ON A TOUR | GIVE ME A TOUR | SHOW ME AROUND</pattern>
+        <template>
+          <tour>
+            <stop target="pricing">[nod] There are no per-minute speech charges. Your site hosts the files.</stop>
+            <stop target="customize">[wave] Use this button to choose my hair, outfit and glasses.</stop>
+            <stop target="abilities">[thumbsup] Try a movement, ask me to sing, or change my personality here.</stop>
+          </tour>
+        </template>
+      </category>
+      <category>
+        <pattern># PRICING # | # PRICE # | # COST # | # PLANS #</pattern>
+        <template>
+          <showcase target="pricing"/>[nod] There’s no per-minute charge for speech. You cover the hosting.
+          <reply>Where can I change your look?</reply>
+        </template>
+      </category>
+      <category>
+        <pattern># CHANGE YOUR LOOK # | # CUSTOMIZE # | # CUSTOMISE # | # CHANGE YOUR OUTFIT #</pattern>
+        <template>
+          <showcase target="customize"/>[wave] Use the Customize Aria button to try a new look.
+          <reply>Show me pricing</reply>
+        </template>
+      </category>
+      <category>
+        <pattern># LIP SYNC # | # LIPSYNC #</pattern>
+        <template>[smile] My mouth follows the movements of the speech synthesizer's virtual jaw, tongue and lips, sampled two hundred times per second.</template>
+      </category>
+    </aiml>
+  </script>
   <script>
     window.addEventListener("DOMContentLoaded", async () => {
       const bot = await window.BotComputer.mount({
         name: "Aria",
         role: "AcmeCloud Concierge",
         company: "AcmeCloud",
+        greeting: "[wave] Hi, I'm Aria! Ask me where to find pricing or how to change my look.",
+        aimlXml: document.getElementById("guideRules").textContent,
         wasmUrl: "./vendor/tts/tts.wasm",
         position: "bottom-right",
         size: "standard",
         chatEnabled: true,
+        allowVisitorCustomization: true,
         eyeTracking: true,
         showCaptions: true,
         // Facts the bot answers about with no rules written. AcmeCloud is a made-up company.
@@ -191,12 +318,12 @@
         },
       });
 
-      document.getElementById("trigPitch").onclick = () => {
-        bot.say("[cheerful] Welcome to AcmeCloud! [wave] I run 100 percent in your browser with WebAssembly vocal tract physics and zero API bills! [chuckle] Not bad for a single file. [thumbsup]");
-      };
-      document.getElementById("trigAskPrice").onclick = () => {
-        bot.ask("Pricing & Plans");
-      };
+      if (location.hash === "#customize") bot.openCustomizer();
+      document.getElementById("customizeAria").onclick = () => bot.openCustomizer();
+      document.getElementById("trigMotion").onclick = () => bot.ask("What moves can you do?");
+      document.getElementById("trigAskTour").onclick = () => bot.ask("Take me on a tour");
+      document.getElementById("trigAskPrice").onclick = () => bot.ask("Show me pricing");
+      document.getElementById("trigAskLook").onclick = () => bot.ask("Where can I change your look?");
       document.getElementById("trigSing").onclick = () => {
         bot.ask("Sing me a song!");
       };

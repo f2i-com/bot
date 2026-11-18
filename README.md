@@ -7,9 +7,10 @@
 ## Features
 
 - **Interactive Body & Face Sculpting**: Drag handles directly on your companion's head, jaw, chin, neck, shoulders, chest, waist, and arms (mouse + mobile touch) or fine-tune proportions via studio sliders.
-- **200 Hz Vocal-Tract Lip Sync (`tts.wasm`)**: Real-time 24 kHz physical vocal-tract speech synthesis drives 9 articulatory parameters every 5 ms (`jaw`, `tongueHeight`, `tongueFront`, `tongueTip`, `lipRound`, `lipSpread`, `lipClose`, `velum`, `energy`) plus prosodic brow lift, head nods, and cursor eye-tracking. The bundled engine is `tts.wasm` 1.2, whose consonants and two default voices were fitted to real speakers for a more natural sound.
+- **2D and 3D avatars.** Choose any of the six characters on the homepage and switch between its illustrated and rigged 3D versions. Drag the 3D character to rotate it. In the studio, use **2D sculpt** to reshape it with handles, or **3D turntable** to inspect it from different angles. **Save PNG** exports the current view with a transparent background in either style. **Voice & gestures** opens the speech editor and articulation display below the stage. The export panel has its own **Avatar style** setting. Browsers without WebGL use the 2D renderer automatically.
+- **200 Hz vocal-tract lip sync.** The voice produces 24 kHz audio and nine mouth and tongue measurements every 5 ms. The studio, conversation page and exported bots share the same synthesizer. Version 1.3 adds the Crisp, Elder, Soft and Mellow voices, adjustable phrase-final vocal fry and improved pronunciation of dates, times and version numbers. [TTS v1.3.0 release](https://github.com/f2i-com/tts/releases/tag/v1.3.0)
 - **AIML 2.0 XML Chatbot Brain**: Turn any companion into an interactive Q&A guide using standard AIML XML (`<pattern>`, `*` / `_` / `#` / `^` wildcards, `<srai>`, `<random>`, `<that>`, `<topic>`, `<set>`/`<get>` memory, `<condition>`, `<emote>`, and `<reply>` quick chips), plus word sets and lookup maps (`<set>` in patterns, `<map>` in templates), arithmetic (`<calc>`), date maths, and rules that can step aside (`<fallback/>`).
-- **Inline Avatar Actions**: Write `[wave]`, `[wink]`, `[nod]`, `[smile]`, `[laugh]`, `[think]`, `[surprised]`, `[shake]`, `[shrug]`, `[thumbsup]`, `[tilt]` or `[bow]` anywhere in a greeting or an answer. The tag is never spoken; the avatar performs it when the speech reaches that point. Voice styles such as `[cheerful]`, `[sad]` and `[serious]` also set the face.
+- **Avatar movements and expressions.** Use `[walk]` for a circuit around the stage, `[dance]` for a two-step, `[stretch]` for alternating overhead reaches and `[squat]` for a knee bend. Other cues include `[wave]`, `[wink]`, `[nod]`, `[smile]`, `[laugh]`, `[think]`, `[surprised]`, `[shake]`, `[shrug]`, `[thumbsup]`, `[tilt]` and `[bow]`. Place a cue in a greeting or reply to time it to the words. Visitors can ask “What moves can you do?”, request “Walk then wave”, try “Show me a warm-up”, repeat a routine, or say “Stop moving”. The **Movement studio** starter pack in the Chat tab includes editable movement rules.
 - **A Voice That Laughs, Sighs and Whispers**: The voice makes 53 sounds that are not words, and the avatar acts each one out as it is heard: `[laugh]`, `[chuckle]`, `[giggle]`, `[gasp]`, `[sigh]`, `[yawn]`, `[hmm]`, `[aww]`, `[phew]`, `[whistle]`, `[ahem]`, `[sneeze]` and more. It can also speak while laughing (`[laughing] ... [/laughing]`, or the "Laughing while speaking" slider). The studio has a palette that plays any sound and inserts its tag, and captions say what was heard: "(laughs)".
 - **Spoken Conversation** ([bot.computer/conversation/](https://bot.computer/conversation/)): Talk with a character out loud. [`stt.wasm`](https://github.com/f2i-com/stt) turns your voice into words, the AIML brain answers and `tts.wasm` talks back, with captions, gestures and the avatar listening while you speak. Pick one of the starting characters, or design your own bot in the studio and press **Talk to** to have a conversation with it. Nothing you say leaves the browser. See [Conversation](#conversation).
 - **Personalities**: Give a bot a character (friendly, bubbly, calm, professional, witty, shy, grumpy, dramatic, laid-back or curious) and the same rules come out differently: its own hello and goodbye, "I'm" or "I am", exclamation marks or none, the laugh it laughs, the things it tends to say first and last, a catchphrase, what it calls visitors. Four dials (energy, formality, playfulness, chattiness) and a set of speaking habits are yours to change, and none of it touches your AIML. See [Personalities](#personalities).
@@ -19,40 +20,84 @@
 - **Matching That Understands What Was Meant**: Typos, chat shorthand ("whats ur pricing"), stretched words ("heyyy"), other forms of a word ("shipped" for "shipping"), synonyms ("fees" for "pricing", "voucher" for "discount"), everyday phrases ("money back"), several questions in one message ("hours and address?"), and being addressed by name. Wording no pattern anticipated is matched by what it is about, and when two rules fit equally well the bot offers both as "did you mean" suggestions instead of guessing. A reply is computed in about a millisecond, so it appears the moment Send is pressed.
 - **Business Facts, No Rules Needed**: Fill in what you do, opening hours, email, phone, address and pricing, and the bot answers questions about them by itself. Phone numbers are read digit by digit and "Mon-Fri" is spoken as "Monday to Friday", while the chat bubble keeps the original text with clickable links.
 - **Deeper Customisation**: Resting expression (smile, brow mood, eye openness), freckles, age lines, a beauty mark, eyeshadow, separate brow colour, earrings, neckwear (necklace, bow tie, scarf, lanyard), headwear (beanie, cap, headband, beret, headphones, headscarf), glasses including cat-eye and aviators, outfits including a polo, a scoop-neck top, an apron, a graphic tee, a button-up shirt, a cardigan and a zip jacket, hairstyles including twin braids, pigtails, space buns, a mohawk and an optional fringe, more headwear (hair bow, flower, tiara, fedora, chef's hat), a brooch, dimples, eyeliner, a nose stud, eyes of two different colours, extra backdrops, sculpt handles for brows, nose and hips, and "Random face" / "Random style" buttons. Left alone, the avatar makes small movements of its own.
-- **100% Self-Contained Single-File Export**: Download a single local `<name>-bot.js` script (about 1.4 MB) with your sculpted avatar, voice settings, embedded AIML XML, and gzipped `tts.wasm` baked inside — zero servers, zero API keys, and zero external dependencies.
+- **Self-contained export.** Download a single `<name>-bot.js` with your character and the features selected in the studio. The voice-enabled download includes compressed `tts.wasm` and works offline.
 - **Studio Conveniences**: Undo / redo for the avatar's look (Ctrl+Z, Ctrl+Shift+Z), autosave of your design in the browser, save / load of the full configuration as JSON, a live articulation scope that traces jaw, tongue, lips, nasal and voicing while the bot speaks, a list of your rules with Try / Find / Remove, and a rule checker that points out misspelled `[actions]`, unknown tags, duplicate patterns and `<srai>` links that lead nowhere.
 - **Mobile-First Studio & Embedded Dock**: Sticky docked mobile stage, thumb-friendly bottom navigation bar, touch-scaled sculpt handles, and Shadow-DOM-isolated mobile companion widget.
 
 ## Quick Start
 
 ```sh
-npm run build   # syncs tts.wasm from ../tts (or E:\repos\softn_bot\tts) & bundles embed/bot-embed.js
+npm ci          # installs the build-time bundler
+npm run build   # builds the site and embed from the checked-in voice engine
 npm test        # runs automated TTS viseme, sculptor, AIML XML, and embed SDK smoke tests
 npm start       # serves https://bot.computer locally at http://localhost:8090/
                 # (the spoken conversation is at http://localhost:8090/conversation/)
 ```
 
+To update the vendored engine from a built TTS checkout, run `npm run sync-tts`. It reads `../tts`, or the checkout specified by `TTS_REPO_DIR`.
+
 ## Embedding on Any Website
 
-### Option 1: 100% Self-Contained Single Local File
-Click **Download self-contained .js** in the studio and add one tag to your webpage:
+In **Preview and export**, choose the avatar style, size and corner. Enable **Let visitors customize the avatar** to add a Customize button beside the published bot. Try it in the preview, then select an installation method under **Add to your site**.
+
+- **One file** downloads a script containing the avatar and the selected voice and chat features. Put it beside your HTML page and paste the generated tag before `</body>`.
+- **Hosted embed** gives you one tag containing your design and AIML. The script and speech engine load from the studio where you copied the code. Use a publicly reachable studio for a public site.
+- **Separate files** gives you a local script tag. Upload the files shown beside your page. Selecting voice adds `tts.wasm`, and selecting chat adds a separately editable `.aiml` file.
+- **JavaScript API** provides a mount example you can call from your own page. **Download an offline demo page** packages the current bot into an HTML file you can open directly.
+
+**Embed size.** Select **2D illustration** for a Canvas-only runtime or **3D character** for WebGL with a 2D fallback. Under **Include in the embed**, choose spoken voice, chat and tours, and built-in small talk. Turning off small talk keeps your own AIML rules. Turning off chat omits the AIML interpreter and tours. The studio shows the selected runtime’s raw and gzipped sizes. With hosted or separate files, the browser fetches the speech engine on first use. Turning off voice removes the speech engine from the export altogether.
+
+All installation methods use the selected runtime. The full `embed/bot-embed.js` SDK remains available to sites that switch features dynamically or use the exported authoring libraries. Its script tag accepts `data-render-mode="2d"` and `data-speech="false"`; use a specialized export to also reduce the script download.
+
+### Guide visitors to a section or button
+
+In the studio’s **Chat** tab, select the **Website guide** starter pack for editable pricing, features, contact and sign-up examples. To add a rule to your current bot, open **Add a Q&A rule → Guide to a page element**. Enter the question, an optional spoken answer and the page target name. Choose an opening gesture or add movements such as `[wave]` to the answer. **Preview and export** includes sample elements for your rules so you can try the questions before installing the bot.
+
+For example, mark your plans section or use its existing `id="pricing"`.
 
 ```html
-<script src="./aria-bot.js" defer></script>
+<section data-bot-showcase="pricing" aria-labelledby="pricing-title">
+  <h2 id="pricing-title">Plans and pricing</h2>
+  <!-- Your plans go here. -->
+</section>
 ```
 
-### Option 2: Hosted on `https://bot.computer` (or Self-Hosted Assets)
+The corresponding AIML rule can combine speech, a gesture and a destination.
+
+```xml
+<category>
+  <pattern>SHOW ME PRICING | WHERE ARE YOUR PLANS</pattern>
+  <template>[nod] Our plans are here. <showcase target="pricing"/></template>
+</category>
+```
+
+When the visitor asks, the widget brings the element into view and the avatar moves beside it. The visitor can still use the highlighted element and can return to chat. The same attribute works on a `div`, a button or another visible element. Target names are case-sensitive, start with a letter, and accept up to 64 letters, digits, hyphens or underscores. Give each destination a unique name. The explicit attribute takes precedence over a matching HTML ID. If the destination is missing from a page, the spoken reply and its gestures still work. [Try the pricing and button examples](https://bot.computer/embed-demo.html)
+
+For an ordered tour, choose **Add tour stop** in the same rule form. Give each stop a target, explanation and gesture. Use **Move up** or **Move down** to put them in visiting order. The **Website guide** starter includes a “Give me a tour” question to try in the preview.
+
+```xml
+<category>
+  <pattern>GIVE ME A TOUR</pattern>
+  <template>
+    <tour>
+      <stop target="features">[wave] Here are the features included with your account.</stop>
+      <stop target="pricing">[nod] Compare the plans here.</stop>
+      <stop target="signup">[thumbsup] Use this button when you’re ready to sign up.</stop>
+    </tour>
+  </template>
+</category>
+```
+
+Mark each destination with a matching ID or `data-bot-showcase` attribute. On **Next** or **Back**, the avatar walks to the stop, turns toward the highlighted section or button, and points as its explanation begins. The gesture in the stop’s AIML plays with that explanation. **Finish** ends the tour, even mid-walk. Visitors who prefer reduced motion go straight to the pointing pose. The same tour works with the 3D avatar and its 2D fallback.
+
+To embed a starter with visitor customization, use the script attribute or pass `allowVisitorCustomization: true` to `BotComputer.mount()`:
 
 ```html
-<script
-  src="https://bot.computer/embed/bot-embed.js"
-  data-wasm="https://bot.computer/vendor/tts/tts.wasm"
-  data-aiml="./aria-brain.aiml"
-  data-name="Aria"
-  data-role="Website Concierge"
-  defer
-></script>
+<script src="https://bot.computer/embed/bot-embed.js"
+        data-name="Aria" data-customize="true" defer></script>
 ```
+
+Visitors can change hair, headwear, glasses, outfits and colors. **Restore original look** returns to the owner's design. Preferences are stored on the visitor's browser for that bot. Set a stable, unique `sessionId` in the configuration to carry preferences across revisions. Studio preview changes stay in the preview and are excluded from the published design.
 
 ## Actions, Moods and the Base Brain
 
@@ -65,7 +110,8 @@ Actions and voice styles go straight into any spoken text: a greeting, an AIML `
 </category>
 ```
 
-- An action can carry its own length: `[wave=3s]`, `[nod=800ms]`.
+- Give an action a duration with `[walk=4s]` or `[nod=800ms]`. A line such as `[walk] Come with me! [wink]` lets a facial expression overlap the walk. Visitors who prefer reduced motion see a held pose for each full-body action.
+- Choose a speaker with `[voice=crisp]`, `[voice=elder]`, `[voice=soft]` or `[voice=mellow]`. Use `[soft]` for a quieter delivery in the current voice and `[creak=0.9]` for stronger vocal fry at the end of phrases.
 - `<emote>wave</emote>` still works and is treated as an inline `[wave]` at that point.
 - Unknown `[tags]` are dropped rather than read aloud.
 
@@ -98,7 +144,7 @@ From JavaScript:
 ```js
 const bot = await BotComputer.mount({ /* ... */ baseBrain: true }); // set false to use only your own AIML
 bot.say("Hello! [wave] Nice to meet you. [wink]");
-bot.emote("wave");    // play one silent gesture now
+bot.emote("dance");   // play the two-step without speaking
 bot.sound("laugh");   // a sound in the bot's own voice, with the face to match
 bot.sound("sigh", { length: 1.5 });   // also: intensity (0..1, "gentle", "strong"), durationMs
 bot.mood("happy");    // lasting facial mood: happy, excited, calm, sad, serious, or "" to clear
@@ -121,7 +167,7 @@ The microphone works like a walkie-talkie: it is paused while the character talk
 
 **Links.** `conversation/` opens with the last character used; `conversation/?with=chloe` (or `marcus`, `viktor`, `nova`, `arthur`, `aria`) opens with that character, and the address bar always shows the link for the current one, ready to share. `?with=yours` opens your own bot, in a browser where one has been designed.
 
-**Size.** `stt.wasm` is about 14 MB (12 MB gzipped), with NVIDIA's English Conformer-CTC speech model inside (CC-BY-4.0, see `THIRD-PARTY-NOTICES.md`). The page loads the voice first, so typing works within seconds, and fetches the recognizer in the background with its progress shown; **Start talking** comes on when it is ready. Only this page loads it: the studio and the embed widget do not. `vendor/stt/VERSION` records which stt release is vendored (the published v1.0.0).
+**Size.** `stt.wasm` is about 14 MB (12 MB gzipped), with NVIDIA's English Conformer-CTC speech model inside (CC-BY-4.0, see `THIRD-PARTY-NOTICES.md`). Typed chat works immediately while the voice and recognizer load in the background. **Start talking** becomes available when the recognizer is ready. Only this page loads it: the studio and the embed widget do not. `vendor/stt/VERSION` records which stt release is vendored (the published v1.0.0).
 
 ## Personalities
 
@@ -280,6 +326,17 @@ The studio's test chat shows which step answered under every reply.
 ```
 
 `<calc>` only ever does arithmetic; nothing is run as code. It also reads sums given verb first: "divide 81 by 3", "add 5 to 10", "subtract 3 from 10".
+
+**Recalling a sentence.** Inside a template, `<input index="1"/>` reads the visitor's original sentence, including when an `<srai>` redirects it. Index 2 reads the sentence immediately before it, which can be in the same message. For a bot reply, `<that index="2,1"/>` reads the final sentence of the reply two turns ago. Both indices count backwards from 1. Use `<request index="1"/>` or `<response index="1"/>` for the whole previous message or reply.
+
+```xml
+<category>
+  <pattern>REPEAT THE LAST SENTENCE</pattern>
+  <template><that index="1,1" default="I haven't said anything yet."/></template>
+</category>
+```
+
+When the widget remembers a chat between pages, it restores the last twelve exchanges and recent references to items, calculations and questions about a set. A visitor can ask the price of a latte, open another page and type “and a mocha?” to continue the same question.
 
 **Names and values worked out at run time.** As in AIML 2.0, an attribute can be written as a child element:
 

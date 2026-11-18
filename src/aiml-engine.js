@@ -327,18 +327,13 @@ function splitSentences(text) {
 
 const BARE_GREETINGS = new Set(["HI", "HELLO", "HEY", "HOWDY", "YO", "GREETINGS", "HI THERE", "HELLO THERE", "HEY THERE"]);
 
-/** Splits what the visitor typed into sentences so "Hi! How much is it?" gets both answered. */
+/** The original input sentences, also used by indexed <input> recall. */
 function splitInputSentences(text) {
   const parts = String(text || "")
     .split(/(?<=[.!?…])\s+|\n+/)
     .map((p) => p.trim())
     .filter((p) => /[A-Za-z0-9]/.test(p));
-  // "Hi! How much is it?" reads as one thought: a short hello, then the question.
-  if (parts.length > 1 && BARE_GREETINGS.has(normalizeAimlInput(parts[0], false))) {
-    const greeting = parts.shift().replace(/[.!?]+$/, "");
-    parts[0] = `${greeting} ${parts[0]}`;
-  }
-  return parts.length ? parts.slice(0, 4) : [String(text || "").trim()];
+  return parts.length ? parts : [String(text || "").trim()];
 }
 
 /** Strips inline TTS control brackets like `[cheerful, speed=1.1]` for clean visual chat display. */
@@ -377,6 +372,7 @@ export function stripSpeechTags(text) {
 export const AVATAR_ACTION_TAGS = [
   "wave", "wink", "nod", "smile", "laugh", "think", "surprised", "shake", "shrug",
   "tilt", "bow", "thumbsup", "blink", "lookleft", "lookright", "lookup", "lookdown",
+  "walk", "dance", "stretch", "squat", "rest",
 ];
 
 const ACTION_ALIASES = {
@@ -444,19 +440,50 @@ export function captionForSpokenWord(token) {
   return SOUND_CAPTIONS[m[1].toLowerCase()] || `(${m[1].toLowerCase()})`;
 }
 
+const STAGE_LABELS = {
+  thumbsup: "Thumbs up", lookleft: "Look left", lookright: "Look right",
+  lookup: "Look up", lookdown: "Look down", shake: "Shake head",
+};
+
+/** A case-sensitive name shared by a showcase rule and a marked element on the host page. */
+export function isShowcaseTarget(name) {
+  return typeof name === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name);
+}
+
+function tourStops(node) {
+  return node.children.filter(child => child.tag === "stop" && isShowcaseTarget(child.attrs.target));
+}
+
+/** Readable transcript for an AIML reply consisting entirely of visual or vocal cues. */
+export function replyDisplayText(reply) {
+  if (reply?.displayText) return reply.displayText;
+  const directions = [];
+  for (const cue of reply?.cues || []) {
+    if (cue.type === "action" && cue.sound) {
+      directions.push(captionForSpokenWord(`[${cue.name}]`));
+    } else if (cue.name && (cue.type === "action" || cue.type === "mood")) {
+      const label = STAGE_LABELS[cue.name] || cue.name.charAt(0).toUpperCase() + cue.name.slice(1);
+      directions.push(`[${label}]`);
+    }
+  }
+  const destination = reply?.showcase || reply?.tour?.[0]?.target;
+  if (destination) directions.push(`[Show ${destination}]`);
+  return directions.join(" ");
+}
+
 // Every bare word the voice engine accepts inside [brackets]. Anything else would be read
 // aloud as a word ("[wink]" came out as "wink"), so unknown words are dropped from the speech.
 const VOICE_TAG_WORDS = new Set(
   ("cheerful happy excited calm sad serious dramatic urgent fast slow louder softer whisper gentle soft loud quiet " +
     "laughing chuckling giggling /laughing /chuckling /giggling /whisper pause " +
-    "inhale reset male female deep husky bright woman_a woman_b man_a man_b soprano alto tenor baritone " +
+    "inhale reset male female deep husky bright crisp elder mellow woman_a woman_b man_a man_b soprano alto tenor baritone " +
     "bass_singer folds pulse modal normal /voice").split(" ")
 );
 
 function resolveActionTag(part) {
   const key = part.split("=")[0].toLowerCase().replace(/[-_]/g, "");
   if (AVATAR_ACTION_TAGS.includes(key)) return key;
-  return ACTION_ALIASES[key] || "";
+  return hasOwn(ACTION_ALIASES, key) ? ACTION_ALIASES[key] : "";
 }
 
 /** Reads the optional duration of an action tag: `[wave=3s]`, `[nod=800ms]`. Returns ms or 0. */
@@ -491,6 +518,11 @@ export function parseSpeechCues(rawText) {
   const cues = [];
   let out = "";
   let words = 0;
+  let pauseMs = 0;
+  const addCue = (cue) => {
+    if (pauseMs) cue.pauseMs = pauseMs; // the silent clock cannot read pauses from TTS word timings
+    cues.push(cue);
+  };
   let inSing = false;
   const pushText = (chunk) => {
     out += chunk;
@@ -526,7 +558,7 @@ export function parseSpeechCues(rawText) {
       // The voice gives each sound its own place among the words, so it counts as one here too.
       const sound = soundOf(part);
       if (sound) {
-        cues.push({ type: "action", name: sound, word: words, ms: parseActionDuration(part) || VOICE_SOUND_MS[sound], sound: true });
+        addCue({ type: "action", name: sound, word: words, ms: parseActionDuration(part) || VOICE_SOUND_MS[sound], sound: true });
         words += 1;
         keep.push(part);
         continue;
@@ -534,16 +566,24 @@ export function parseSpeechCues(rawText) {
       const action = resolveActionTag(part);
       if (action) {
         const ms = parseActionDuration(part);
-        cues.push(ms ? { type: "action", name: action, word: words, ms } : { type: "action", name: action, word: words });
+        addCue(ms ? { type: "action", name: action, word: words, ms } : { type: "action", name: action, word: words });
         continue;
       }
       const word = part.toLowerCase();
-      if (Object.prototype.hasOwnProperty.call(MOOD_TAGS, word)) {
-        cues.push({ type: "mood", name: MOOD_TAGS[word], word: words });
+      const pause = /^pause=(\d+(?:\.\d+)?|\.\d+)(ms|s)?$/.exec(word);
+      if (pause) {
+        // tts.wasm reads bare integers as milliseconds and decimals as seconds.
+        const seconds = pause[2] ? pause[2] === "s" : pause[1].includes(".");
+        pauseMs += Math.max(10, Math.min(10000, Number(pause[1]) * (seconds ? 1000 : 1)));
       }
-      if (part.includes("=") || VOICE_TAG_WORDS.has(word)) keep.push(part);
+      if (Object.prototype.hasOwnProperty.call(MOOD_TAGS, word)) {
+        addCue({ type: "mood", name: MOOD_TAGS[word], word: words });
+      }
+      // Saved scripts and shy characters use [soft] to lower the current speaker's voice.
+      // Since 1.3 the synthesizer interprets bare [soft] as a different speaker.
+      if (part.includes("=") || VOICE_TAG_WORDS.has(word)) keep.push(word === "soft" ? "style=soft" : part);
     }
-    if (keep.length === parts.length) out += m[0];
+    if (keep.length === parts.length && keep.every((part, i) => part === parts[i])) out += m[0];
     else if (keep.length) out += `[${keep.join(", ")}]`;
   }
   pushText(src.slice(last));
@@ -1256,7 +1296,7 @@ function labelFromWords(words) {
 const KNOWN_TEMPLATE_TAGS = new Set(
   ("star thatstar topicstar bot get set think srai sr random li condition uppercase lowercase formal sentence " +
     "person person2 date time size version input that request response br emote gesture reply button chip suggest " +
-    "oob chips map calc explode count daysuntil fallback try name value text postback persona").split(" ")
+    "oob chips map calc explode count daysuntil fallback try name value text postback persona showcase tour stop").split(" ")
 );
 
 // A bot property used in a pattern (`<bot name="company"/>`) that has no value yet.
@@ -1349,9 +1389,7 @@ export class AIMLEngine {
     this._randomMemory = new WeakMap();
     // Word sets and lookup maps defined in each layer; yours are looked up before the base layer's.
     this._defs = { custom: { sets: new Map(), maps: new Map() }, base: { sets: new Map(), maps: new Map() } };
-    this._lastFrame = null; // the last question about one member of a set, so a follow-up can continue it
-    this._lastEntity = null; // the last member of one of your sets or maps that was mentioned
-    this._lastResult = null; // the last number a <calc> produced
+    this._followups = {};
     this._justVaried = false;
     this._resolvingEntity = false;
     this._setLookup = (name) => this.#findSet(name);
@@ -1543,9 +1581,15 @@ export class AIMLEngine {
           const first = (n.children || []).find((c) => c.type === "element" && c.tag === "li");
           return first ? walk(first) : inner();
         }
+        case "tour": {
+          const first = tourStops(n)[0];
+          return first ? " " + first.children.map(walk).join("") : "";
+        }
+        case "stop":
         case "think":
         case "emote":
         case "gesture":
+        case "showcase":
         case "reply":
         case "button":
         case "chip":
@@ -1611,7 +1655,7 @@ export class AIMLEngine {
       }
     };
 
-    const walk = (node, line) => {
+    const walk = (node, line, parentTag) => {
       if (node.type === "text") {
         checkText(node.value, line);
         return;
@@ -1619,6 +1663,20 @@ export class AIMLEngine {
       const here = node.line || line;
       if (!KNOWN_TEMPLATE_TAGS.has(node.tag)) {
         warn(here, `<${node.tag}> is not a tag this engine supports. Its contents are used as plain text.`);
+      } else if (node.tag === "tour") {
+        if (!tourStops(node).length) warn(here, "<tour> needs at least one <stop> with a valid target.");
+        if (node.children.some(c => c.type === "element" ? c.tag !== "stop" : c.value.trim())) {
+          warn(here, "Put each tour explanation and its gestures inside a <stop>.");
+        }
+      } else if (node.tag === "stop") {
+        if (parentTag !== "tour") warn(here, "<stop> belongs directly inside a <tour>.");
+        if (!isShowcaseTarget(node.attrs.target)) warn(here, '<stop> needs a literal target such as "pricing". Use a letter followed by letters, digits, underscores or hyphens, up to 64 characters total.');
+      } else if (node.tag === "showcase") {
+        if (!isShowcaseTarget(node.attrs.target)) {
+          warn(here, '<showcase> needs a target such as "pricing". Start with a letter and use up to 64 letters, digits, underscores or hyphens.');
+        } else if (node.children.some(child => child.type === "element" || child.value.trim())) {
+          warn(here, 'Only the target attribute of <showcase> is used. Put speech and gestures beside the tag.');
+        }
       } else if (node.tag === "bot") {
         const key = (node.attrs.name || "").toLowerCase();
         if (key && !String(this.botProps[key] || this.xmlBotProps?.[key] || "").trim()) {
@@ -1635,7 +1693,7 @@ export class AIMLEngine {
       if (node.tag === "map" && node.attrs.name && !this.#findMap(node.attrs.name.toLowerCase())) {
         warn(here, `The map "${node.attrs.name}" is not defined, so nothing is looked up there.`);
       }
-      for (const child of node.children || []) walk(child, here);
+      for (const child of node.children || []) walk(child, here, node.tag);
     };
 
     for (const cat of this.layers.custom) {
@@ -1689,31 +1747,50 @@ export class AIMLEngine {
 
   /** What the visitor has told the bot so far, so a conversation can continue on another page. */
   exportSession() {
+    const { frame, entity, result } = this._followups;
     return {
       vars: [...this.vars.entries()],
       lastBotThat: this.lastBotThat,
       history: this.history.slice(-12),
       fallbackStreak: this.fallbackStreak,
+      followups: {
+        frame: frame ? { ...frame, stars: [...frame.stars] } : null,
+        entity: entity ? { ...entity } : null,
+        result: result ? { ...result } : null,
+        justVaried: this._justVaried,
+      },
     };
   }
 
   importSession(session) {
     if (!session || typeof session !== "object") return;
     try {
+      this.resetSession();
       if (Array.isArray(session.vars)) this.vars = new Map(session.vars.filter((e) => Array.isArray(e) && e.length === 2));
       if (!this.vars.has("topic")) this.vars.set("topic", "*");
       if (typeof session.lastBotThat === "string") this.lastBotThat = session.lastBotThat;
-      if (Array.isArray(session.history)) this.history = session.history.slice(-12);
+      if (Array.isArray(session.history)) {
+        this.history = session.history.slice(-12).filter((turn) => typeof turn?.user === "string" && typeof turn?.bot === "string");
+      }
       this.fallbackStreak = Number(session.fallbackStreak) || 0;
+      const { frame, entity, result, justVaried } = session.followups || {};
+      const live = (item, max) => Number.isInteger(item?.remaining) && item.remaining >= 0 && item.remaining <= max;
+      if (live(frame, 2) && (frame.layer === "custom" || frame.layer === "base") && typeof frame.pattern === "string" &&
+          Array.isArray(frame.stars) && frame.stars.every((star) => typeof star === "string")) {
+        this._followups.frame = { pattern: frame.pattern, layer: frame.layer, stars: [...frame.stars], remaining: frame.remaining };
+      }
+      if (live(entity, 3) && typeof entity.phrase === "string") this._followups.entity = { phrase: entity.phrase, remaining: entity.remaining };
+      if (live(result, 3) && typeof result.value === "string" && result.value.trim() && Number.isFinite(Number(result.value))) {
+        this._followups.result = { value: result.value, remaining: result.remaining };
+      }
+      this._justVaried = justVaried === true;
     } catch {
       this.resetSession();
     }
   }
 
   resetSession() {
-    this._lastFrame = null;
-    this._lastEntity = null;
-    this._lastResult = null;
+    this._followups = {};
     this._justVaried = false;
     this.vars.clear();
     this.vars.set("topic", "*");
@@ -2269,7 +2346,9 @@ export class AIMLEngine {
     // just asked. A base-layer rule with a wildcard ("DO YOU LIKE *", "I AM CONFUSED #") is only a
     // guess about the rest of the sentence, and is held back while the rules about the site get
     // every chance below, however loosely they fit.
-    const isFirm = (cat) => cat.layer === "custom" || cat.literalOnly || cat.firm || cat.that !== "*" || cat.topic !== "*";
+    // A whole input validated by a named set is also specific ("9 times 9" is a calculation).
+    const isFirm = (cat) => cat.layer === "custom" || cat.literalOnly || cat.firm ||
+      cat.sets.length === cat.patTokens.length || cat.that !== "*" || cat.topic !== "*";
     const exact = (w) => {
       let hit = this.#matchWords(w, false, ctx);
       // A follow-up rule whose wildcards swallowed something meaningful is a guess as well: after
@@ -2356,27 +2435,27 @@ export class AIMLEngine {
     //    question was about asks that question again.
     //    The member may come with a few filler words ("is there almond too?"), but not in a
     //    sentence about the visitor ("I am from France" is not a question about capitals).
-    const frame = this._lastFrame;
-    if (
-      frame &&
-      this.history.length - frame.at <= 2 &&
-      words.length <= 6 &&
-      !words.some((w) => FIRST_PERSON.has(w)) &&
-      (!frame.category.requires.length || this.#hasAnyProp(frame.category.requires))
-    ) {
-      const set = this.#findSet(frame.category.sets[0]);
-      const found = set && !this._resolvingEntity ? findMember(set, words) : null;
+    const frame = this._followups.frame;
+    if (frame && !this._resolvingEntity && words.length <= 6 && !words.some((w) => FIRST_PERSON.has(w))) {
+      // Look up the live rule. A page can have a newer template, or the owner may have removed the rule.
+      const category = this.layers[frame.layer].find((c) => c.pattern === frame.pattern && c.continuable && c.sets.length === 1 &&
+        (!c.requires.length || this.#hasAnyProp(c.requires)));
+      const set = category && this.#findSet(category.sets[0]);
+      const found = set && findMember(set, words);
       if (found && found.rest.every((w) => FOLLOW_UP_WORDS.has(w))) {
-        const stars = [...frame.stars];
-        stars[frame.setIndex] = found.member;
-        return { category: frame.category, stars, thatStars: [], topicStars: [], kind: "followup" };
+        const slots = category.patTokens.filter((token) => WILDCARDS.has(token) || isSetToken(token));
+        if (frame.stars.length === slots.length) {
+          const stars = [...frame.stars];
+          stars[slots.findIndex(isSetToken)] = found.member;
+          return { category, stars, thatStars: [], topicStars: [], kind: "followup" };
+        }
       }
     }
 
     //    "What's 9 times 9?" ... "Divide that by 3": "that" or "it" stands for the last result.
     //    "And take away 20" carries on from it.
-    const result = this._lastResult;
-    if (result && !this._resolvingEntity && this.history.length - result.at <= 3) {
+    const result = this._followups.result;
+    if (result && !this._resolvingEntity) {
       const at = words.findIndex((w) => w === "THAT" || w === "IT");
       const carriesOn = at < 0 && CALC_CONTINUES.has(trimmed[0]);
       if (at >= 0 || carriesOn) {
@@ -2398,8 +2477,8 @@ export class AIMLEngine {
 
     //    "My friend says the toasties are great." ... "How much are they?": a pronoun (or "there",
     //    for a place) stands for the last member of a set or map that was mentioned.
-    const entity = this._lastEntity;
-    if (entity && !this._resolvingEntity && this.history.length - entity.at <= 3) {
+    const entity = this._followups.entity;
+    if (entity && !this._resolvingEntity) {
       const at = words.findIndex((w) => POINTING_WORDS.has(w));
       if (at >= 0) {
         this._resolvingEntity = true;
@@ -2466,6 +2545,8 @@ export class AIMLEngine {
         displayText: "",
         chips: this.quickChips.slice(0, 4),
         emote: null,
+        showcase: "",
+        tour: [],
         cues: [],
         cueWords: 0,
         matchedPattern: null,
@@ -2477,34 +2558,48 @@ export class AIMLEngine {
     // 1. Decide which rule answers each sentence before running any template, so a sentence
     //    that only reaches the catch-all cannot crowd out one that was understood.
     const plans = [];
-    const addPlan = (text, hit) => {
+    const inputs = splitInputSentences(rawInput);
+    const withGreeting = inputs.length > 1 && BARE_GREETINGS.has(normalizeAimlInput(inputs[0], false));
+    const start = withGreeting ? 1 : 0;
+    const addPlan = (text, hit, inputIndex) => {
       if (hit && hit.kind !== "fallback" && !plans.some((p) => p.hit.category === hit.category)) {
-        plans.push({ text, hit });
+        plans.push({ text, hit, inputIndex });
         return true;
       }
       return false;
     };
-    for (const sentence of splitInputSentences(rawInput)) {
+    for (let i = start; i < Math.min(inputs.length, start + 4); i++) {
+      // Match a short hello together with the question, but retain both original sentences for recall.
+      const sentence = withGreeting && i === start ? `${inputs[0].replace(/[.!?]+$/, "")} ${inputs[i]}` : inputs[i];
       // "What are your hours and where are you?" is two questions when each half finds its own rule.
       const halves = sentence.split(/\s+(?:and|&|plus|also|but)\s+/i);
       if (halves.length === 2) {
+        // An explicit whole phrase can carry its own choreography or answer.
+        // Splitting "dance and nod" first would discard an owner's rule for both.
+        const whole = this.resolve(sentence);
+        const tokens = whole?.category.patTokens;
+        if (whole?.kind === "exact" && tokens.some(t => ["AND", "PLUS", "ALSO", "BUT"].includes(t))
+          && !tokens.some(t => WILDCARDS.has(t))) {
+          addPlan(sentence, whole, i);
+          continue;
+        }
         const [a, b] = halves.map((part) => this.resolve(part));
         const specific = (h) => h && h.kind !== "fallback" && !h.category.isCatchAll;
         if (specific(a) && specific(b) && this.#answerIdentity(a.category) !== this.#answerIdentity(b.category)) {
-          addPlan(halves[0], a);
-          addPlan(halves[1], b);
+          addPlan(halves[0], a, i);
+          addPlan(halves[1], b, i);
           continue;
         }
       }
       const hit = this.resolve(sentence);
-      addPlan(sentence, hit);
-      if (hit && hit.also) addPlan(sentence, hit.also);
+      addPlan(sentence, hit, i);
+      if (hit && hit.also) addPlan(sentence, hit.also, i);
     }
     let isFallback = false;
     let related = [];
     if (!plans.length) {
       const whole = this.resolve(rawInput);
-      if (whole) plans.push({ text: rawInput, hit: whole });
+      if (whole) plans.push({ text: rawInput, hit: whole, inputIndex: inputs.length - 1 });
       isFallback = !whole || whole.kind === "fallback";
       related = (whole && whole.related) || [];
     }
@@ -2515,9 +2610,10 @@ export class AIMLEngine {
     this.#refreshAutoPredicates(rawInput);
 
     // 2. Run the chosen templates.
-    const sideEffects = { chips: [], emote: null, streakBefore };
+    const sideEffects = { chips: [], emote: null, showcase: "", tour: null, streakBefore, inputs };
     const parts = [];
     for (const plan of plans.slice(0, 3)) {
+      sideEffects.inputIndex = plan.inputIndex;
       const text = this.#evalHit(plan.hit, plan.text, 0, sideEffects).replace(/\s+/g, " ").trim();
       if (text) parts.push(text);
     }
@@ -2528,8 +2624,10 @@ export class AIMLEngine {
     if ((first && first.kind === "fallback") || sideEffects.fellBack) isFallback = true;
     if (sideEffects.related && sideEffects.related.length) related = sideEffects.related;
 
-    const speechRaw =
-      parts.join(" ") ||
+    const showcase = isFallback ? "" : sideEffects.showcase;
+    const stops = isFallback ? [] : sideEffects.tour || [];
+    if (stops[0]?.text) parts.push(stops[0].text);
+    const speechRaw = parts.length || showcase || stops.length ? parts.join(" ") :
       `I'm not sure about that yet, but I'm happy to help with questions about ${this.botProps.company || "our site"}!`;
 
     // "Speak slower", "whisper from now on": a style the visitor asked for is put in front of every
@@ -2538,14 +2636,25 @@ export class AIMLEngine {
     // The personality has the last word on how it is said. What the engine remembers of the
     // conversation (<that>, the history) stays as the rules wrote it, so a character that adds
     // "Easy peasy!" after an answer cannot break a rule that is waiting for that answer.
-    const spoken = this.#inCharacter(speechRaw, { isFallback, first, plans, sideEffects, style });
-    const parsed = parseSpeechCues(style && VOICE_TAG_WORDS.has(style) ? `[${style}] ${spoken}` : spoken);
-    const displayText = stripSpeechTags(spoken);
+    // A tour is a script. Keep each stop's gestures and word positions intact, and
+    // expose its opening line as the ordinary reply for clients without tour controls.
+    const spoken = stops.length ? speechRaw : this.#inCharacter(speechRaw, { isFallback, first, plans, sideEffects, style });
+    const prepareLine = text => {
+      const parsed = parseSpeechCues(text && style && VOICE_TAG_WORDS.has(style) ? `[${style}] ${text}` : text);
+      return { speechText: parsed.speechText, displayText: stripSpeechTags(text), cues: parsed.cues, cueWords: parsed.wordCount };
+    };
+    const opening = prepareLine(spoken);
+    const tour = stops.map((stop, index) => ({ target: stop.target, ...(index === 0 ? opening : prepareLine(stop.text)) }));
     const plainText = stripSpeechTags(speechRaw);
     const sentences = splitSentences(plainText);
     this.lastBotThat = sentences[sentences.length - 1] || plainText;
     this.history.push({ user: rawInput, bot: plainText });
     if (this.history.length > 50) this.history.shift();
+    // Follow-ups age by completed exchanges, even after the transcript reaches its size limit.
+    for (const [kind, reference] of Object.entries(this._followups)) {
+      if (reference.remaining === 0) delete this._followups[kind];
+      else reference.remaining--;
+    }
     // "Another one" repeats the last thing that was asked for. An answer to the bot's own question
     // ("a clock?" during a riddle) is not something to ask for again.
     // Only something that comes out differently each time (a joke, a fact, a riddle) is worth
@@ -2565,16 +2674,15 @@ export class AIMLEngine {
     ];
     for (const set of nameable) {
       const found = findMember(set, said);
-      if (found) this._lastEntity = { phrase: found.member, at: this.history.length };
+      if (found) this._followups.entity = { phrase: found.member, remaining: 3 };
     }
     // The last number worked out, so "divide that by 3" has something to divide.
-    if (sideEffects.calcValue !== undefined) this._lastResult = { value: sideEffects.calcValue, at: this.history.length };
+    if (sideEffects.calcValue !== undefined) this._followups.result = { value: sideEffects.calcValue, remaining: 3 };
     // Whether this answer was one that varies; "go on" right after a joke means "another joke".
     this._justVaried = Boolean(!isFallback && first && first.category.varies);
     // Remember a question about one member of a set, so "and Germany?" can continue it.
     if (!isFallback && first && first.category.continuable && first.category.sets.length === 1 && first.stars) {
-      const slots = first.category.patTokens.filter((t) => WILDCARDS.has(t) || isSetToken(t));
-      this._lastFrame = { category: first.category, stars: first.stars, setIndex: slots.findIndex(isSetToken), at: this.history.length };
+      this._followups.frame = { layer: first.category.layer, pattern: first.category.pattern, stars: [...first.stars], remaining: 2 };
     }
 
     // When the bot did not understand, offer the default suggestions as a way forward.
@@ -2589,14 +2697,13 @@ export class AIMLEngine {
       chips = [...related, ...fallbackChips.filter((c) => !taken.has(c.label.toLowerCase()))].slice(0, 4);
     }
 
-    const firstAction = parsed.cues.find((c) => c.type === "action");
+    const firstAction = opening.cues.find((c) => c.type === "action");
     return {
-      speechText: parsed.speechText,
-      displayText,
+      ...opening,
       chips,
       emote: firstAction ? firstAction.name : null,
-      cues: parsed.cues,
-      cueWords: parsed.wordCount,
+      showcase,
+      tour,
       matchedPattern: first ? first.category.pattern : null,
       matchedLayer: first ? first.category.layer : null,
       matchKind: sideEffects.fellBack ? "fallback" : first ? first.kind : "none",
@@ -2868,10 +2975,28 @@ export class AIMLEngine {
         return String(this.categories.length);
       case "version":
         return "bot.computer AIML 2.0";
-      case "input":
-        return ctx.input;
-      case "that":
-        return this.lastBotThat;
+      case "input": {
+        if (attrs.index === undefined) return ctx.input;
+        if (!/^[1-9]\d*$/.test(attrs.index)) return attrs.default ?? "";
+        let back = Number(attrs.index);
+        const { inputs, inputIndex } = ctx.sideEffects;
+        if (back <= inputIndex + 1) return inputs[inputIndex + 1 - back];
+        back -= inputIndex + 1;
+        for (let i = this.history.length - 1; i >= 0; i--) {
+          const previous = splitInputSentences(this.history[i].user);
+          if (back <= previous.length) return previous[previous.length - back];
+          back -= previous.length;
+        }
+        return attrs.default ?? "";
+      }
+      case "that": {
+        if (attrs.index === undefined) return this.lastBotThat;
+        const index = /^([1-9]\d*)(?:\s*,\s*([1-9]\d*))?$/.exec(attrs.index);
+        const reply = index && this.history[this.history.length - Number(index[1])]?.bot;
+        if (!reply) return attrs.default ?? "";
+        const sentences = splitSentences(reply);
+        return sentences[sentences.length - Number(index[2] || 1)] ?? (attrs.default ?? "");
+      }
       case "request": {
         // What the visitor said n turns ago (1 = their previous message).
         const n = Math.max(1, parseInt(attrs.index || "1", 10));
@@ -2884,6 +3009,26 @@ export class AIMLEngine {
       }
       case "br":
         return "\n";
+      case "showcase":
+        // Read only the authored attribute. Responses, captures and recalled input stay plain text.
+        if (!ctx.sideEffects.showcase && !ctx.sideEffects.tour && isShowcaseTarget(attrs.target)) ctx.sideEffects.showcase = attrs.target;
+        return "";
+      case "tour": {
+        // Only the first page action runs, including actions reached through <srai>.
+        // Render the stops once so going back repeats the same line and gesture.
+        if (ctx.sideEffects.showcase || ctx.sideEffects.tour) return "";
+        const stops = tourStops(node);
+        if (stops.length) {
+          const tour = ctx.sideEffects.tour = [];
+          for (const stop of stops) {
+            const text = this.#evalChildren(stop.children, ctx).replace(/\s+/g, " ").trim();
+            tour.push({ target: stop.attrs.target, text });
+          }
+        }
+        return "";
+      }
+      case "stop":
+        return "";
       case "emote":
       case "gesture": {
         // Becomes an inline action tag at this point in the reply, so it fires when speech gets here.
@@ -2933,6 +3078,23 @@ export const BOT_FACTS = [
   { key: "pricing", label: "Pricing", placeholder: "Plans start at nine dollars a month, with a free trial.", long: true },
 ];
 
+function declaredPageActions(template) {
+  const names = new Set(), tours = [];
+  const visit = node => {
+    if (node.tag === "showcase") {
+      if (isShowcaseTarget(node.attrs.target)) names.add(node.attrs.target);
+    } else if (node.tag === "tour") {
+      const targets = tourStops(node).map(stop => stop.attrs.target);
+      if (targets.length) tours.push(targets);
+      for (const target of targets) names.add(target);
+    } else if (node.tag !== "stop") {
+      for (const child of node.children || []) visit(child);
+    }
+  };
+  visit(template);
+  return { showcases: [...names], tours };
+}
+
 /**
  * Validates AIML XML and returns what the Studio shows: one entry per `<category>` (with every
  * wording of its pattern), the suggestion chips, and anything the rule checker noticed.
@@ -2952,6 +3114,7 @@ export function inspectAimlXml(xmlString, botProps = {}, options = {}) {
           that: c.that,
           topic: c.topic,
           preview: engine.previewTemplate(c.template, engine.sampleStars(c)).slice(0, 140),
+          ...declaredPageActions(c.template),
           line: c.line,
           start: c.start,
           isCatchAll: c.isCatchAll,
@@ -3020,7 +3183,7 @@ export function removeAimlRule(xmlString, start) {
 }
 
 /** Appends a new `<category>` rule cleanly before `</aiml>` in an AIML XML document. */
-export function appendAimlRule(xmlString, { pattern, answer, chips = [], emote = "" }) {
+export function appendAimlRule(xmlString, { pattern, answer = "", chips = [], emote = "", showcase = "", tour = [] }) {
   // Normalize each `|`-separated alternative on its own; normalizing the whole string would strip the
   // pipes and merge every alias into one long pattern that never matches.
   const cleanPattern =
@@ -3034,12 +3197,18 @@ export function appendAimlRule(xmlString, { pattern, answer, chips = [], emote =
     .filter(Boolean)
     .map((c) => `<reply>${escapeXml(c)}</reply>`)
     .join("");
-  const action = emote ? resolveActionTag(emote === "happy" ? "smile" : emote) : "";
-  const actionTag = action ? `[${action}] ` : "";
+  const actionTag = name => {
+    const action = name ? resolveActionTag(name === "happy" ? "smile" : name) : "";
+    return action ? `[${action}] ` : "";
+  };
+  const stops = tour.filter(stop => isShowcaseTarget(stop?.target)).map(stop =>
+    `<stop target="${stop.target}">${actionTag(stop.emote)}${escapeXml((stop.answer || "").trim())}</stop>`);
+  const showcaseTag = !stops.length && isShowcaseTarget(showcase) ? `<showcase target="${showcase}"/>` : "";
+  const tourXml = stops.length ? `\n      <tour>\n        ${stops.join("\n        ")}\n      </tour>\n    ` : "";
   const block = [
     `  <category>`,
     `    <pattern>${escapeXml(cleanPattern)}</pattern>`,
-    `    <template>${actionTag}${escapeXml(answer.trim())}${chipXml}</template>`,
+    `    <template>${showcaseTag}${actionTag(emote)}${escapeXml(answer.trim())}${tourXml}${chipXml}</template>`,
     `  </category>`,
   ].join("\n");
 
@@ -3056,7 +3225,112 @@ export function appendAimlRule(xmlString, { pattern, answer, chips = [], emote =
 // (greeting variants, thanks, goodbyes and other small talk come from BASE_AIML_XML below)
 // ============================================================================
 
-export const STARTER_AIML_PACKS = {
+// This same editable AIML is available as a starter pack and as part of everyday small talk.
+// A map's keys form a named AIML set, so a command only accepts moves the avatar can perform.
+const MOVEMENT_AIML = `
+  <set name="stage_request">can you, could you, would you, can you please, could you please, would you please, please, first</set>
+  <set name="silent_move">walk, dance, stretch, squat, wave, smile, wink, nod, shrug, bow, blink</set>
+  <map name="stage_move">
+    walk: [walk] I'll take a little turn around the stage.
+    walk around: [walk] Watch me take a turn around the stage.
+    take a walk: [walk] I'll take a little turn around the stage.
+    dance: [dance] One, two, step together. Back the other way!
+    do a dance: [dance] One, two, step together. Back the other way!
+    wave: [wave] A big hello from my corner of the screen!
+    stretch: [stretch] Reach up on one side, then the other.
+    squat: [squat] Down we go, and back up again!
+    bow: [bow] Here's a bow for the audience.
+    take a bow: [bow] Thank you for watching, everyone.
+    wink: [wink] Did you catch that?
+    smile: [smile] This one's for you!
+    nod: [nod] Yes, I'm following along.
+    shrug: [shrug] Up go my shoulders.
+    thumbs up: [thumbsup] You've got it!
+    blink: [blink] Just a blink of an eye.
+    tilt your head: [tilt] A different angle, just like that.
+    shake your head: [shake] No, no, no.
+    look left: [lookleft] I'm looking to my left.
+    look right: [lookright] Now I'm looking to my right.
+    look up: [lookup] My eyes are on the ceiling.
+    look down: [lookdown] I'm looking down at the floor.
+  </map>
+  <category persona="off">
+    <pattern>WHAT MOVES CAN YOU DO | WHAT MOVEMENTS CAN YOU DO | WHAT GESTURES CAN YOU DO | HOW CAN YOU MOVE | WHAT ROUTINES DO YOU KNOW | SHOW ME THE MOVES | MOVEMENT MENU | SHOW ME A ROUTINE</pattern>
+    <template>I can walk, dance, stretch, squat, and gesture. Choose a routine, or put two moves together, like “walk then wave”.
+      <reply>Walk then wave</reply><reply>Show me a warm-up</reply><reply>Do a dance routine</reply><reply>Greet the audience</reply><reply>Wave without speaking</reply>
+    </template>
+  </category>
+  <category persona="off">
+    <pattern><set>stage_move</set> | CAN YOU <set>stage_move</set> | COULD YOU <set>stage_move</set> | WOULD YOU <set>stage_move</set> | <set>stage_move</set> FOR ME | PLEASE <set>stage_move</set> | CAN YOU PLEASE <set>stage_move</set> | SHOW ME HOW YOU <set>stage_move</set></pattern>
+    <template><think><set name="laststagecue"><star/></set></think><map name="stage_move"><star/></map>
+      <reply>Repeat that move</reply><reply>What moves can you do?</reply>
+    </template>
+  </category>
+  <category persona="off">
+    <pattern><set>stage_move</set> THEN <set>stage_move</set> | <set>stage_move</set> AND THEN <set>stage_move</set> | <set>stage_move</set> AND <set>stage_move</set></pattern>
+    <template><think><set name="laststagecue"><star/> then <star index="2"/></set></think>
+      <map name="stage_move"><star/></map> [pause=500ms] <map name="stage_move"><star index="2"/></map>
+      <reply>Repeat those moves</reply><reply>Stop moving</reply><reply>What moves can you do?</reply>
+    </template>
+  </category>
+  <category persona="off">
+    <pattern><set>stage_request</set> <set>stage_move</set> THEN <set>stage_move</set> | <set>stage_request</set> <set>stage_move</set> AND THEN <set>stage_move</set> | <set>stage_request</set> <set>stage_move</set> AND <set>stage_move</set></pattern>
+    <template><srai><star index="2"/> then <star index="3"/></srai></template>
+  </category>
+  <category persona="off">
+    <pattern>SILENTLY <set>silent_move</set> | <set>silent_move</set> WITHOUT SPEAKING | <set>silent_move</set> WITHOUT TALKING | JUST <set>silent_move</set> NO WORDS</pattern>
+    <template><think><set name="laststagecue">silently <star/></set></think><gesture><star/></gesture><reply>Repeat that move</reply><reply>What moves can you do?</reply></template>
+  </category>
+  <category persona="off">
+    <pattern>SILENTLY <set>silent_move</set> THEN <set>silent_move</set> | <set>silent_move</set> THEN <set>silent_move</set> WITHOUT SPEAKING</pattern>
+    <template><think><set name="laststagecue">silently <star/> then <star index="2"/></set></think><gesture><star/></gesture> [pause=1200ms] <gesture><star index="2"/></gesture>
+      <reply>Repeat those moves</reply><reply>Stop moving</reply><reply>What moves can you do?</reply>
+    </template>
+  </category>
+  <category persona="off">
+    <pattern>SHOW ME A WARM UP | DO A WARM UP | WARM UP | WARMUP | WARM UP ROUTINE | DO A WARM UP ROUTINE</pattern>
+    <template><think><set name="laststagecue">warm up</set></think>
+      [stretch] Reach both arms up and take a moment at the top. [pause=400ms] [squat] Now bend your knees, hold for a beat, and come back up. [thumbsup] That's the warm-up!
+      <reply>Repeat the routine</reply><reply>Do a dance routine</reply><reply>Stop moving</reply>
+    </template>
+  </category>
+  <category persona="off">
+    <pattern>DO A DANCE ROUTINE | DANCE ROUTINE | SHOW ME A DANCE ROUTINE | PUT ON A DANCE SHOW | DO A LITTLE DANCE</pattern>
+    <template><think><set name="laststagecue">dance routine</set></think>
+      [dance] Step to the side, swing your arms, and back the other way. [pause=350ms] [wave] A wave for everyone watching. [bow] And take a bow!
+      <reply>Repeat the routine</reply><reply>Greet the audience</reply><reply>Stop moving</reply>
+    </template>
+  </category>
+  <category persona="off">
+    <pattern>GREET THE AUDIENCE | WELCOME THE AUDIENCE | MAKE AN ENTRANCE | SHOW ME YOUR ENTRANCE</pattern>
+    <template><think><set name="laststagecue">greet the audience</set></think>
+      [walk] Here I come, right around to the front of the stage. [wave] Hello, everyone! [smile] It's good to see you.
+      <reply>Repeat the routine</reply><reply>Show me a warm-up</reply><reply>Stop moving</reply>
+    </template>
+  </category>
+  <category persona="off">
+    <pattern>REPEAT THAT MOVE | REPEAT THOSE MOVES | REPEAT THE ROUTINE | DO THAT ROUTINE AGAIN | DO THE SAME MOVE AGAIN</pattern>
+    <template><condition name="laststagecue"><li value="*"><srai><get name="laststagecue"/></srai></li><li><srai>WHAT MOVES CAN YOU DO</srai></li></condition></template>
+  </category>
+  <category persona="off">
+    <pattern>STOP MOVING | STOP DANCING | STOP WALKING | STOP THE ROUTINE | CANCEL THE ROUTINE | STOP THE GESTURE | BACK TO YOUR RESTING POSE</pattern>
+    <template>[rest] Okay, I've stopped.<reply>Repeat the routine</reply><reply>What moves can you do?</reply></template>
+  </category>
+  <category><pattern>GO FOR A WALK | CAN YOU MOVE | WALK ACROSS THE STAGE</pattern><template><srai>WALK</srai></template></category>
+  <category><pattern>SHOW ME YOUR MOVES | BUST A MOVE</pattern><template><srai>DANCE</srai></template></category>
+  <category><pattern>DO A STRETCH | STRETCH YOUR ARMS</pattern><template><srai>STRETCH</srai></template></category>
+  <category><pattern>DO A SQUAT | BEND YOUR KNEES</pattern><template><srai>SQUAT</srai></template></category>
+  <category><pattern>WAVE AT ME | WAVE TO ME | WAVE HELLO | GIVE ME A WAVE | CAN YOU WAVE AT ME</pattern><template><srai>WAVE</srai></template></category>
+  <category><pattern>GIVE ME A THUMBS UP | THUMBS UP PLEASE</pattern><template><srai>THUMBS UP</srai></template></category>
+  <category><pattern>WINK AT ME</pattern><template><srai>WINK</srai></template></category>
+  <category><pattern>GIVE ME A SMILE</pattern><template><srai>SMILE</srai></template></category>
+  <category><pattern>NOD YOUR HEAD</pattern><template><srai>NOD</srai></template></category>
+  <category><pattern>SAY NO</pattern><template><srai>SHAKE YOUR HEAD</srai></template></category>
+`;
+
+export const STARTER_AIML_PACKS = /* @__PURE__ */ createStarterPacks();
+function createStarterPacks() {
+  return {
   concierge: {
     id: "concierge",
     label: "SaaS & Website Concierge",
@@ -3066,6 +3340,7 @@ export const STARTER_AIML_PACKS = {
   <!-- Default quick-ask chips shown in the companion chat bar -->
   <chips>
     <chip>What can you do?</chip>
+    <chip>What moves can you do?</chip>
     <chip>Pricing &amp; Plans</chip>
     <chip>How does lip-sync work?</chip>
     <chip>Sing me a song!</chip>
@@ -3490,6 +3765,64 @@ export const STARTER_AIML_PACKS = {
 </aiml>`,
   },
 
+  pageguide: {
+    id: "pageguide",
+    label: "Website guide",
+    description: "Give a guided tour or show visitors a specific section or button.",
+    xml: `<?xml version="1.0" encoding="UTF-8"?>
+<aiml version="2.0">
+  <!-- Mark each destination on your page with the matching HTML ID or data-bot-showcase attribute. -->
+  <chips>
+    <chip>Give me a tour</chip><chip>Show me pricing</chip><chip>What features are available?</chip>
+    <chip>How can I contact you?</chip><chip>Where do I sign up?</chip>
+  </chips>
+  <category>
+    <pattern>SHOW ME PRICING | WHERE ARE YOUR PLANS | HOW MUCH DOES IT COST</pattern>
+    <template><showcase target="pricing"/>[nod] Compare the plans in the pricing section.<reply>Where do I sign up?</reply></template>
+  </category>
+  <category>
+    <pattern>WHAT FEATURES ARE AVAILABLE | SHOW ME THE FEATURES</pattern>
+    <template><showcase target="features"/>The features section shows what is included.<reply>Show me pricing</reply></template>
+  </category>
+  <category>
+    <pattern>HOW CAN I CONTACT YOU | WHERE IS THE CONTACT FORM</pattern>
+    <template><showcase target="contact"/>[wave] You can reach the team through the contact section.</template>
+  </category>
+  <category>
+    <pattern>WHERE DO I SIGN UP | HOW DO I GET STARTED</pattern>
+    <template><showcase target="signup"/>[smile] Use the sign-up button to get started.</template>
+  </category>
+  <category>
+    <pattern>WHAT CAN YOU SHOW ME</pattern>
+    <template>I can show you the plans, features, contact details or sign-up button. What would you like to see?
+      <reply>Show me pricing</reply><reply>What features are available?</reply><reply>How can I contact you?</reply><reply>Where do I sign up?</reply>
+    </template>
+  </category>
+  <category>
+    <pattern>GIVE ME A TOUR | TAKE ME ON A TOUR | SHOW ME AROUND</pattern>
+    <template>
+      <tour>
+        <stop target="features">[wave] Start with the features to see what the service includes.</stop>
+        <stop target="pricing">[nod] Next, compare the plans and their prices.</stop>
+        <stop target="signup">[thumbsup] When you’re ready, use this button to sign up.</stop>
+      </tour>
+    </template>
+  </category>
+</aiml>`,
+  },
+  movement: {
+    id: "movement",
+    label: "Movement studio",
+    description: "Perform two moves in sequence, greet an audience, or rehearse a routine.",
+    xml: `<?xml version="1.0" encoding="UTF-8"?>
+<aiml version="2.0">
+  <chips><chip>What moves can you do?</chip><chip>Walk then wave</chip><chip>Show me a warm-up</chip><chip>Do a dance routine</chip></chips>
+  <category><pattern>HELLO | HI | WHAT CAN YOU DO | HELP</pattern><template><srai>WHAT MOVES CAN YOU DO</srai></template></category>
+  ${MOVEMENT_AIML}
+  <category><pattern>STOP | PLEASE STOP | STOP IT</pattern><template><srai>STOP MOVING</srai></template></category>
+  <category><pattern>*</pattern><template>Try naming a move like “wave” or “stretch”.<reply>What moves can you do?</reply></template></category>
+</aiml>`,
+  },
   companion: {
     id: "companion",
     label: "Friendly AI Companion & Singer",
@@ -3561,13 +3894,16 @@ export const STARTER_AIML_PACKS = {
   </category>
 </aiml>`,
   },
-};
+  };
+}
 
 // ============================================================================
 // Base brain: everyday small talk that sits underneath a bot's own rules
 // ============================================================================
 
-export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
+export const BASE_AIML_XML = /* @__PURE__ */ createBaseAiml();
+function createBaseAiml() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <aiml version="2.0">
   <!--
     bot.computer base brain: everyday conversation that sits underneath your own rules.
@@ -4225,8 +4561,8 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <template>Thank you! [smile] It's the look I was given in the studio, and I think it suits me.</template>
   </category>
   <category>
-    <pattern>DO YOU HAVE A BODY | DO YOU HAVE LEGS | DO YOU HAVE HANDS | DO YOU HAVE ARMS | DO YOU HAVE FEET | CAN YOU WALK | CAN YOU MOVE | HOW TALL ARE YOU | HOW MUCH DO YOU WEIGH</pattern>
-    <template>I'm mostly head, shoulders and good intentions. [shrug] But I can wave. [wave]</template>
+    <pattern>DO YOU HAVE A BODY | DO YOU HAVE LEGS | DO YOU HAVE HANDS | DO YOU HAVE ARMS | DO YOU HAVE FEET | HOW TALL ARE YOU | HOW MUCH DO YOU WEIGH</pattern>
+    <template>My body lives on this little stage. [wave] Want to see me move?<reply>Take a walk</reply><reply>Do a dance</reply></template>
   </category>
   <category>
     <pattern>CAN YOU SEE ME | DO YOU SEE ME | ARE YOU WATCHING ME | ARE YOU SPYING ON ME | ARE YOU RECORDING # | CAN YOU HEAR ME | DO YOU HEAR ME | ARE YOU LISTENING # | CAN YOU SEE # | ARE YOU TRACKING ME | DO YOU HAVE A CAMERA</pattern>
@@ -4655,6 +4991,10 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>WHAT | PARDON | SORRY WHAT | EXCUSE ME | COME AGAIN | HUH | SAY THAT AGAIN # | REPEAT | REPEAT THAT # | CAN YOU REPEAT THAT # | WHAT DID YOU SAY # | SAY AGAIN | ONE MORE TIME | WHAT WAS THAT | I DID NOT CATCH THAT | I MISSED THAT | CAN YOU SAY THAT AGAIN #</pattern>
     <template>Sure. <response index="1" default="I haven't said anything yet!"/></template>
   </category>
+  <category persona="off">
+    <pattern>REPEAT YOUR LAST SENTENCE | REPEAT THE LAST SENTENCE | WHAT WAS YOUR LAST SENTENCE</pattern>
+    <template><that index="1,1" default="I haven't said anything yet."/></template>
+  </category>
   <category>
     <pattern>GUESS WHAT | YOU KNOW WHAT | KNOW WHAT | DO YOU KNOW WHAT | GUESS WHAT HAPPENED | YOU WILL NEVER GUESS #</pattern>
     <template>[surprised] What?</template>
@@ -4744,7 +5084,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <!-- ============================== Jokes and facts ============================== -->
   <category>
     <pattern># ENOUGH JOKES # | # NO MORE JOKES # | # STOP WITH THE JOKES # | # STOP TELLING JOKES # | # ENOUGH OF THE JOKES # | # NO JOKES # | # NOT A JOKE # | ENOUGH | THAT IS ENOUGH # | OK ENOUGH # | STOP | STOP IT # | PLEASE STOP # | NO MORE # | ENOUGH OF THAT #</pattern>
-    <template>Alright, I'll stop. [smile] What would you like to talk about instead?</template>
+    <template>[rest] Alright, I'll stop. [smile] What would you like to talk about instead?</template>
   </category>
   <category>
     <pattern># JOKE # | # JOKES #</pattern>
@@ -5217,30 +5557,7 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
     <pattern>DO AN IMPRESSION # | DO IMPRESSIONS # | CAN YOU DO IMPRESSIONS # | DO A VOICE # | DO A DIFFERENT VOICE # | CHANGE YOUR VOICE # | DO A FUNNY VOICE # | CAN YOU CHANGE YOUR VOICE # | DO ANOTHER VOICE #</pattern>
     <template>[deep] How about this one? [/voice] [bright] Or this one? [/voice] [husky] Or maybe this? [/voice] [chuckle] I think I'll stay with my own.</template>
   </category>
-  <category>
-    <pattern>CAN YOU DANCE | DANCE | DANCE FOR ME | DO A DANCE | SHOW ME YOUR MOVES</pattern>
-    <template>[shrug] My dance moves are mostly nodding. [nod] Like this!</template>
-  </category>
-  <category>
-    <pattern>WAVE | WAVE AT ME | CAN YOU WAVE | WAVE HELLO | WAVE TO ME</pattern>
-    <template>[wave] Hello there!</template>
-  </category>
-  <category>
-    <pattern>WINK | WINK AT ME | CAN YOU WINK</pattern>
-    <template>[wink] Like this?</template>
-  </category>
-  <category>
-    <pattern>SMILE | SMILE FOR ME | CAN YOU SMILE | GIVE ME A SMILE</pattern>
-    <template>[smile] Always!</template>
-  </category>
-  <category>
-    <pattern>NOD | CAN YOU NOD | NOD YOUR HEAD</pattern>
-    <template>[nod] Yes indeed.</template>
-  </category>
-  <category>
-    <pattern>SHAKE YOUR HEAD | CAN YOU SHAKE YOUR HEAD | SAY NO</pattern>
-    <template>[shake] No, no, no.</template>
-  </category>
+  ${MOVEMENT_AIML}
   <category>
     <pattern>LAUGH | CAN YOU LAUGH | LAUGH FOR ME</pattern>
     <template>[laugh] Ha! That felt good.</template>
@@ -5248,10 +5565,6 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <category>
     <pattern>LOOK SURPRISED | ACT SURPRISED | BE SURPRISED | CAN YOU LOOK SURPRISED</pattern>
     <template>[surprised] Oh my!</template>
-  </category>
-  <category>
-    <pattern>SHRUG | CAN YOU SHRUG</pattern>
-    <template>[shrug] Who knows?</template>
   </category>
   <category>
     <pattern>DO A TRICK | SHOW ME A TRICK | DO SOMETHING | DO SOMETHING COOL | SHOW ME WHAT YOU CAN DO | WHAT TRICKS CAN YOU DO | DO SOMETHING FUNNY | IMPRESS ME</pattern>
@@ -5908,3 +6221,4 @@ export const BASE_AIML_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </category>
 </aiml>
 `;
+}

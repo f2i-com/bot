@@ -1,6 +1,6 @@
 {
   "name": "bot-computer",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -11,5 +11,8 @@
     "build": "node tools/build_dist.mjs",
     "start": "node serve.mjs",
     "test": "node tests/smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

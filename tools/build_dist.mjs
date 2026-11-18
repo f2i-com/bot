@@ -7,22 +7,14 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { AVATAR_PRESETS } from "../src/avatar-renderer.js";
-import { STARTER_AIML_PACKS } from "../src/aiml-engine.js";
+import { STARTER_AIML_PACKS, appendAimlRule } from "../src/aiml-engine.js";
+import { embedRuntimeName } from "../src/embed-profile.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = path.join(root, "dist");
 const siteDir = path.join(distDir, "site");
 
-// 1. Sync tts.wasm (if local ../tts repo exists) and rebuild embed/bot-embed.js
-if (
-  fs.existsSync(path.resolve(root, "..", "tts", "Cargo.toml")) ||
-  fs.existsSync("E:\\repos\\softn_bot\\tts\\Cargo.toml")
-) {
-  execFileSync(process.execPath, [path.join(root, "tools", "sync_tts.mjs")], {
-    cwd: root,
-    stdio: "inherit",
-  });
-}
+// 1. Build the embed against the version of tts.wasm checked in with this site.
 execFileSync(process.execPath, [path.join(root, "tools", "build_embed.mjs")], {
   cwd: root,
   stdio: "inherit",
@@ -78,7 +70,14 @@ const wasmGzB64 = zlib.gzipSync(rawWasmBytes, { level: 9 }).toString("base64");
 fs.copyFileSync(path.join(root, "embed", "bot-embed.js"), path.join(distDir, "bot-embed.js"));
 fs.copyFileSync(path.join(root, "vendor", "tts", "tts.wasm"), path.join(distDir, "tts.wasm"));
 
+const installationBrain = appendAimlRule(STARTER_AIML_PACKS.concierge.xml, {
+  pattern: "SHOW ME THE INSTALLATION STEPS",
+  answer: "Add this script to the page where you want your companion to appear.",
+  emote: "nod",
+  showcase: "installation",
+});
 const sampleConfig = {
+  renderMode: "3d",
   name: AVATAR_PRESETS[0].name,
   role: AVATAR_PRESETS[0].role,
   company: "bot.computer",
@@ -92,20 +91,26 @@ const sampleConfig = {
   chatStartOpen: false,
   voice: AVATAR_PRESETS[0].voiceOverrides,
   avatar: AVATAR_PRESETS[0].avatar,
-  aimlXml: STARTER_AIML_PACKS.concierge.xml,
+  aimlXml: appendAimlRule(installationBrain, {
+    pattern: "TAKE ME ON A TOUR | SHOW ME AROUND",
+    tour: [
+      { target: "installation", emote: "nod", answer: "This script adds me to your page. Choose Next to see the rule for this tour." },
+      { target: "tour-rules", emote: "wave", answer: "Open this example to see how each stop names a page target and gives me a line to say there." },
+    ],
+  }),
 };
 
 const selfContainedSample = [
   `/*!`,
   ` * bot.computer — Pre-built 100% Self-Contained Sample Companion (Aria)`,
-  ` * Includes 2.5D Avatar + AIML 2.0 XML Brain + Gzipped tts.wasm inside a single JS file.`,
+  ` * Includes Rigged 3D avatar and canvas fallback + AIML 2.0 XML Brain + Gzipped tts.wasm inside a single JS file.`,
   ` * Usage: <script src="./bot-sample-self-contained.js" defer></script>`,
   ` */`,
   `(function(){`,
   `  globalThis.__BOT_COMPUTER_EMBEDDED_WASM_GZ__ = "${wasmGzB64}";`,
   `  globalThis.__BOT_COMPUTER_AUTO_CONFIG__ = ${JSON.stringify(sampleConfig, null, 2).replace(/<\//g, "<\\/")};`,
   `})();`,
-  embedRuntimeSrc,
+  fs.readFileSync(path.join(root, "embed", embedRuntimeName(sampleConfig)), "utf8"),
 ].join("\n");
 
 fs.writeFileSync(path.join(distDir, "bot-sample-self-contained.js"), selfContainedSample, "utf8");
@@ -219,7 +224,20 @@ const sdkDemoHtml = `<!doctype html>
 </head>
 <body style="font-family:system-ui,sans-serif;max-width:720px;margin:48px auto;padding:0 20px;line-height:1.6">
   <h1>bot.computer Embed SDK Demo</h1>
-  <p>This page loads <code>./bot-sample-self-contained.js</code> — a single self-contained script with Aria's avatar, AIML XML chatbot brain, and <code>tts.wasm</code> baked inside.</p>
+  <p>Open <strong>Ask</strong> on Aria and type “Take me on a tour” to walk through the setup.</p>
+  <section data-bot-showcase="installation" style="padding:16px 20px;background:#f0f3f9;border-radius:12px">
+    <h2>Installation steps</h2>
+    <p>Put <code>bot-sample-self-contained.js</code> beside your HTML file and add this tag before the closing body tag.</p>
+    <code>&lt;script src="./bot-sample-self-contained.js" defer&gt;&lt;/script&gt;</code>
+  </section>
+  <section style="margin:32px 0 160px">
+    <h2>Customize the tour</h2>
+    <details>
+      <summary data-bot-showcase="tour-rules">See an example tour stop</summary>
+      <p><code>&lt;stop target="installation"&gt;[nod] Here’s the script.&lt;/stop&gt;</code></p>
+      <p>In the Studio, use <strong>Import</strong> under <strong>AIML document</strong> to open <code>concierge.aiml</code> from this kit. Give each stop the ID of a section or button on your page.</p>
+    </details>
+  </section>
   <script src="./bot-sample-self-contained.js" defer></script>
 </body>
 </html>
@@ -227,9 +245,13 @@ const sdkDemoHtml = `<!doctype html>
 
 const sdkZipBuf = createZipBuffer([
   { name: "bot-embed.js", data: Buffer.from(embedRuntimeSrc, "utf8") },
+  { name: "sizes.json", data: fs.readFileSync(path.join(root, "embed", "sizes.json")) },
+  ...fs.readdirSync(path.join(root, "embed")).filter(name => /^bot-[23]d-.*\.js$/.test(name)).map(name => ({
+    name, data: fs.readFileSync(path.join(root, "embed", name)),
+  })),
   { name: "tts.wasm", data: rawWasmBytes },
   { name: "bot-sample-self-contained.js", data: Buffer.from(selfContainedSample, "utf8") },
-  { name: "concierge.aiml", data: Buffer.from(STARTER_AIML_PACKS.concierge.xml, "utf8") },
+  { name: "concierge.aiml", data: Buffer.from(sampleConfig.aimlXml, "utf8") },
   { name: "demo.html", data: Buffer.from(sdkDemoHtml, "utf8") },
   // Apache 2.0 asks that every copy carries the license and notices.
   ...["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES.md"].map((name) => ({

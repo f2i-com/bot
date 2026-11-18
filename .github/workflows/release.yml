@@ -23,6 +23,7 @@ jobs:
 
       - name: Build upload-ready site & embed bundles and run smoke tests
         run: |
+          npm ci
           node tools/build_dist.mjs
           node tests/smoke.mjs
 

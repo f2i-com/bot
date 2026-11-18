@@ -2,6 +2,10 @@
 // Supports both ES module import inside the studio preview AND standalone bundling into `embed/bot-embed.js`
 // (including 100% self-contained single-file downloads with gzipped base64 `tts.wasm` baked inside).
 
+import { LiveAvatar } from "./turntable/live-avatar.js";
+import { HAS_WEBGL, HAS_SPEECH, HAS_CHAT, HAS_BASE_BRAIN, FULL_SDK } from "./embed-capabilities.js";
+import { createVisitorCustomizer, visitorLookKey } from "./visitor-customizer.js";
+import { createPageShowcase } from "./page-showcase.js";
 import {
   DEFAULT_AVATAR,
   createAnimState,
@@ -17,6 +21,7 @@ import {
 import { normalizePersona, personaGreeting } from "./persona.js";
 import {
   AIMLEngine,
+  replyDisplayText,
   stripSpeechTags,
   parseSpeechCues,
   captionForSpokenWord,
@@ -194,6 +199,7 @@ button:focus-visible,
   align-items: center;
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
+.bc-stage-slot { display: contents; }
 .bc-stage-card {
   position: relative;
   width: var(--bc-w, 168px);
@@ -212,7 +218,11 @@ button:focus-visible,
   height: var(--bc-orb, 152px);
   border-radius: 50%;
 }
+.bc-stage-card canvas[hidden] { display: none; }
 .bc-stage-card canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   width: 100%;
   height: 100%;
   display: block;
@@ -373,6 +383,33 @@ button:focus-visible,
   display: flex;
   animation: bcChatIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.bc-root [hidden], .bc-root.customizing .bc-chat:not(.bc-customizer) { display: none; }
+.bc-customizer { width: 306px; }
+.bc-look-body { overflow-y: auto; overscroll-behavior: contain; min-height: 0; padding: 15px; }
+.bc-look-fields, .bc-look-colors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.bc-look-fields label, .bc-look-colors label { color: #3b4556; font: 600 12px/1.35 system-ui, sans-serif; }
+.bc-look-fields label { display: grid; gap: 5px; }
+.bc-look-fields select {
+  width: 100%; min-width: 0; padding: 7px 4px; border-radius: 7px; border: 1px solid #c8d0df;
+  color: #202837; background: #fff; font: 400 13px/1.3 system-ui, sans-serif;
+}
+.bc-look-colors { border-top: 1px solid #e1e5ec; margin-top: 14px; padding-top: 13px; gap: 8px 12px; }
+.bc-look-colors label { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.bc-look-colors input {
+  appearance: none; box-sizing: border-box; width: 35px; height: 30px; padding: 3px; border: 1px solid #c8d0df;
+  border-radius: 8px; background: #fff; cursor: pointer;
+}
+.bc-look-colors input::-webkit-color-swatch-wrapper { padding: 0; }
+.bc-look-colors input::-webkit-color-swatch { border: 0; border-radius: 4px; }
+.bc-look-colors input::-moz-color-swatch { border: 0; border-radius: 4px; }
+.bc-look-footer {
+  display: flex; align-items: center; justify-content: space-between; flex: none; padding: 9px 13px;
+  border-top: 1px solid #e1e5ec; background: #f6f8fb;
+}
+.bc-look-reset { border: 0; background: transparent; color: #374257; padding: 6px 0; font: 600 12px system-ui; cursor: pointer; }
+.bc-look-reset:disabled { opacity: .5; cursor: default; }
+.bc-customizer :focus-visible { outline: 2px solid #3549ca; outline-offset: 2px; }
+.bc-look-toggle[aria-expanded="true"] { background: #e6eaff; color: #192558; }
 @keyframes bcChatIn {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
 }
@@ -570,11 +607,11 @@ button:focus-visible,
   width: 108px;
   height: 108px;
 }
-.bc-root.is-narrow-host.chat-is-open .bc-stage-card {
+.bc-root.is-narrow-host:is(.chat-is-open,.customizing) .bc-stage-card {
   width: 88px;
   height: 104px;
 }
-.bc-root.is-narrow-host.chat-is-open .bc-stage-card.shape-circle {
+.bc-root.is-narrow-host:is(.chat-is-open,.customizing) .bc-stage-card.shape-circle {
   width: 84px;
   height: 84px;
 }
@@ -583,9 +620,14 @@ button:focus-visible,
   max-width: 100%;
   max-height: 340px;
 }
+.bc-root.is-narrow-host.pos-contained .bc-customizer {
+  max-height: min(390px, calc(var(--bc-host-h, 520px) - 182px), calc(100dvh - 192px));
+}
+.bc-root.is-narrow-host .bc-stage-wrap { max-width: 100%; }
+.bc-root.is-narrow-host .bc-controls { max-width: 100%; gap: 2px; flex-wrap: wrap; justify-content: center; }
 .bc-root.is-narrow-host .bc-btn {
   min-height: 34px;
-  padding: 0 10px;
+  padding: 0 6px;
 }
 
 @media (max-width: 640px) {
@@ -615,11 +657,11 @@ button:focus-visible,
     width: 110px;
     height: 110px;
   }
-  .bc-root.chat-is-open .bc-stage-card {
+  .bc-root:is(.chat-is-open,.customizing) .bc-stage-card {
     width: 88px;
     height: 104px;
   }
-  .bc-root.chat-is-open .bc-stage-card.shape-circle {
+  .bc-root:is(.chat-is-open,.customizing) .bc-stage-card.shape-circle {
     width: 84px;
     height: 84px;
   }
@@ -632,7 +674,90 @@ button:focus-visible,
     min-height: 34px;
     padding: 0 10px;
   }
+  .bc-customizer { max-height: min(398px, calc(100dvh - 186px - env(safe-area-inset-bottom, 0px))); }
+  .bc-look-fields select { font-size: 16px; }
 }
+@media (max-width: 640px) and (min-height: 600px) {
+  .bc-root.customizing:not(.is-narrow-host) .bc-stage-card { width: 136px; height: 164px; }
+  .bc-root.customizing:not(.is-narrow-host) .bc-stage-card.shape-circle { width: 136px; height: 136px; }
+  .bc-customizer { max-height: min(398px, calc(100dvh - 250px - env(safe-area-inset-bottom, 0px))); }
+}
+@media (max-width: 360px) {
+  .bc-controls { gap: 2px; }
+  .bc-controls .bc-btn { padding: 0 6px; }
+}
+
+${HAS_CHAT ? `
+.bc-guide-layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147483001; overflow: hidden; }
+.bc-guide-layer.is-contained { position: absolute; z-index: 21; }
+.bc-guide-layer[hidden], .bc-guide-ring[hidden], .bc-guide-summary { display: none; }
+.bc-guide-ring {
+  position: absolute; pointer-events: none; border: 3px solid #544bd1;
+  box-shadow: inset 0 0 0 2px #fff, 0 0 0 2px #fff, 0 0 12px #25207155;
+}
+.bc-root.is-guiding {
+  position: fixed; right: auto; bottom: auto; left: var(--bc-guide-x); top: var(--bc-guide-y);
+  z-index: 2147483002;
+  width: min(260px, var(--bc-guide-width)); max-width: none; padding: 0;
+  transition: left .23s ease-out, top .23s ease-out;
+}
+.bc-root.pos-contained.is-guiding { position: absolute; z-index: 22; }
+.bc-root.is-guiding .bc-companion-row { display: block; max-width: none; width: 100%; }
+.bc-root.is-guiding .bc-stage-wrap {
+  display: flex; flex-direction: row; align-items: center; width: 100%; gap: 4px;
+  padding: 5px 8px 5px 2px; color: #24253a; background: #fff; border: 1px solid #d6d1ed;
+  border-radius: 15px; box-shadow: 0 6px 22px #17132d33;
+}
+.bc-root.avatar-on-right .bc-stage-wrap { flex-direction: row-reverse; padding: 5px 2px 5px 8px; }
+.bc-root.is-guiding .bc-stage-slot { display: block; flex: 0 0 37%; }
+.bc-root.is-guiding .bc-stage-wrap .bc-stage-card[role] {
+  width: 100%; height: 107px; filter: none; transform: none; transition: none;
+}
+.bc-root.is-guiding :is(.bc-chat, .bc-controls, .bc-caption, .bc-unmute-prompt) { display: none; }
+.bc-root.is-guiding .bc-guide-summary {
+  display: grid; min-width: 0; flex: 1; gap: 3px;
+  font: 13px/1.35 system-ui, sans-serif;
+}
+.bc-guide-label { font-weight: 700; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: #343056; }
+.bc-guide-answer { max-height: 4.05em; overflow-y: auto; overflow-wrap: anywhere; overscroll-behavior: contain; }
+.bc-guide-answer:empty { display: none; }
+.bc-guide-back {
+  justify-self: start; border: 0; border-radius: 5px; padding: 4px 0; background: transparent;
+  color: #3f37a2; font: 650 12px/1.4 system-ui, sans-serif; cursor: pointer;
+}
+.bc-guide-back:hover { text-decoration: underline; }
+.bc-tour-progress, .bc-tour-controls { display: none; }
+.bc-root.is-touring { width: min(304px, var(--bc-guide-width)); transition: none; }
+.bc-root.is-touring .bc-stage-slot { height: 120px; }
+.bc-root.is-touring .bc-stage-wrap .bc-stage-card[role] { height: 100%; }
+.bc-root.is-travelling .bc-stage-wrap .bc-stage-card[role] {
+  transform: translate3d(var(--bc-walk-x, 0px), var(--bc-walk-y, 0px), 0);
+  pointer-events: none; z-index: 1;
+}
+.bc-root.is-travelling .bc-guide-answer { visibility: hidden; }
+.bc-root.is-travelling .bc-stage-wrap { background: transparent; border-color: transparent; box-shadow: none; }
+.bc-root.is-travelling .bc-guide-summary { position: relative; isolation: isolate; }
+.bc-root.is-travelling .bc-guide-summary::before {
+  content: ""; position: absolute; z-index: -1; inset: -6px; background: #fff;
+  border: 1px solid #d6d1ed; border-radius: 12px; box-shadow: 0 4px 16px #17132d22;
+}
+.bc-root.is-touring .bc-guide-back { display: none; }
+.bc-root.is-touring .bc-tour-progress { display: block; color: #58516d; font: 600 11px/1.4 system-ui, sans-serif; }
+.bc-root.is-touring .bc-tour-controls { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.bc-tour-controls button {
+  min-height: 32px; padding: 3px 7px; border-radius: 6px; border: 1px solid #d6d1ed;
+  background: white; color: #38325d; font: 600 12px/1.3 system-ui, sans-serif; cursor: pointer;
+}
+.bc-tour-controls .bc-tour-next:not(:disabled), .bc-tour-controls .bc-tour-next:disabled + .bc-tour-finish {
+  background: #463baf; border-color: #463baf; color: white;
+}
+.bc-tour-controls button:disabled { opacity: .44; cursor: default; }
+.bc-tour-controls button:focus-visible { outline: 2px solid #4239a9; outline-offset: 2px; }
+@media (pointer: coarse), (max-width: 640px) {
+  .bc-tour-controls button { min-width: 44px; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .bc-root.is-guiding { transition: none; } }
+` : ""}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;
@@ -643,6 +768,7 @@ button:focus-visible,
 
 // Inline line icons (a Shadow DOM widget can't reference the host page's icon sprite).
 const ICONS = {
+  look: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 1 9-9c0 2.5-1.5 4-4 4h-2a1.5 1.5 0 0 0-1.3 2.3l.4.6C15 20.2 13.7 21 12 21Z"/><circle cx="7.5" cy="11" r=".8"/><circle cx="10" cy="7" r=".8"/><circle cx="15" cy="8" r=".8"/></svg>',
   play: '<svg class="bc-ic solid" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4a.6.6 0 0 0 .92.5l11.3-7.2a.6.6 0 0 0 0-1L8.42 4.3a.6.6 0 0 0-.92.5z"/></svg>',
   stop: '<svg class="bc-ic solid" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.2"/></svg>',
   chat: '<svg class="bc-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>',
@@ -706,18 +832,23 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     eyeTracking: true,
     showCaptions: true,
     chatEnabled: true,
+    speechEnabled: true,
     chatStartOpen: false,
+    allowVisitorCustomization: false,
     baseBrain: true, // everyday small talk underneath your own AIML rules
     facts: {}, // { about, hours, email, phone, address, pricing }: answered without writing any rules
     rememberChat: true, // keep the conversation when the visitor moves to another page (this tab only)
     persona: null, // a personality: "bubbly", "grumpy", ... or an object (see persona.js); null for none
     wasmUrl: "./tts.wasm",
     aimlUrl: "",
-    aimlXml: STARTER_AIML_PACKS.concierge.xml,
+    aimlXml: !FULL_SDK || userConfig.aimlUrl ? "" : STARTER_AIML_PACKS.concierge.xml,
     voice: { gender: "female", pitchHz: 192, speed: 1.05, expressiveness: 1.06 },
     avatar: { ...DEFAULT_AVATAR },
     ...userConfig,
   };
+  if (!HAS_CHAT) config.chatEnabled = false;
+  if (!HAS_SPEECH) config.speechEnabled = false;
+  if (!HAS_WEBGL) config.renderMode = "2d";
   config.avatar = { ...DEFAULT_AVATAR, ...(userConfig.avatar || {}) };
   config.persona = normalizePersona(config.persona);
   // A bot with a personality and no greeting of its own greets in character.
@@ -782,15 +913,43 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
         </form>
       </section>
 
+      <section id="bc-look" class="bc-chat bc-customizer" aria-label="Customize avatar" hidden>
+        <header class="bc-chat-head">
+          <div class="bc-chat-title"><strong>Customize avatar</strong><span>Only your view changes</span></div>
+          <button type="button" class="bc-chat-close bc-look-close" aria-label="Close customizer">${ICONS.close}</button>
+        </header>
+        <div class="bc-look-body">
+          <div class="bc-look-fields"></div>
+          <div class="bc-look-colors"></div>
+        </div>
+        <footer class="bc-look-footer">
+          <button type="button" class="bc-look-reset">Restore original look</button>
+          <button type="button" class="bc-btn accent bc-look-done">Done</button>
+        </footer>
+      </section>
       <div class="bc-stage-wrap">
         <div class="bc-caption" aria-live="off"></div>
-        <div class="bc-stage-card" role="button" tabindex="0">
-          <canvas width="360" height="440"></canvas>
-          <div class="bc-unmute-prompt" hidden>Tap to hear</div>
+        <div class="bc-stage-slot">
+          <div class="bc-stage-card" role="button" tabindex="0">
+            <canvas width="360" height="440"></canvas>
+            <canvas class="bc-model" width="360" height="440" aria-hidden="true"></canvas>
+            <div class="bc-unmute-prompt" hidden>Tap to hear</div>
+          </div>
         </div>
+${HAS_CHAT ? `        <div class="bc-guide-summary">
+          <div role="status" aria-atomic="true"><span id="bc-tour-progress" class="bc-tour-progress"></span><strong id="bc-guide-label" class="bc-guide-label"></strong></div>
+          <div id="bc-guide-answer" class="bc-guide-answer"></div>
+          <button type="button" class="bc-guide-back" aria-describedby="bc-guide-label bc-guide-answer">← Back to chat</button>
+          <div class="bc-tour-controls" role="group" aria-label="Tour navigation" aria-describedby="bc-tour-progress bc-guide-label bc-guide-answer">
+            <button type="button" class="bc-tour-prev">Back</button>
+            <button type="button" class="bc-tour-next">Next</button>
+            <button type="button" class="bc-tour-finish">Finish</button>
+          </div>
+        </div>` : ""}
         <div class="bc-controls">
           <button type="button" class="bc-btn bc-speak-btn" title="Speak the greeting">${ICONS.play}<span>Speak</span></button>
           <button type="button" class="bc-btn accent bc-ask-btn" title="Ask a question">${ICONS.chat}<span>Ask</span></button>
+          <button type="button" class="bc-btn bc-look-toggle" aria-label="Customize avatar" title="Customize avatar" aria-controls="bc-look" aria-expanded="false" hidden>${ICONS.look}<span>Customize</span></button>
           <button type="button" class="bc-btn bc-mute-btn" title="Mute" aria-label="Mute" aria-pressed="false">${ICONS.volume}</button>
           <button type="button" class="bc-btn bc-min-btn" title="Minimize" aria-label="Minimize">${ICONS.minus}</button>
         </div>
@@ -800,6 +959,8 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   shadow.appendChild(rootEl);
 
   const canvas = rootEl.querySelector("canvas");
+  const modelCanvas = rootEl.querySelector(".bc-model");
+  let liveAvatar = null;
   const stageCard = rootEl.querySelector(".bc-stage-card");
   const captionEl = rootEl.querySelector(".bc-caption");
   const promptBadge = rootEl.querySelector(".bc-unmute-prompt");
@@ -817,10 +978,66 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   const closeChatBtn = rootEl.querySelector(".bc-chat-close");
   const minPill = rootEl.querySelector(".bc-minimized-pill");
   const pillLabel = rootEl.querySelector(".bc-pill-label");
+  const lookBtn = rootEl.querySelector(".bc-look-toggle");
+  const lookPanel = rootEl.querySelector(".bc-customizer");
+  let lookEditor = null;
+  let lookKey = visitorLookKey(config);
+  let displayAvatar = config.avatar;
+
+  function setLookOpen(open, returnFocus = false) {
+    lookPanel.hidden = !open;
+    lookPanel.classList.toggle("open", open);
+    rootEl.classList.toggle("customizing", open);
+    lookBtn.setAttribute("aria-expanded", String(open));
+    if (open) lookPanel.querySelector("select")?.focus({ preventScroll: true });
+    else if (returnFocus) lookBtn.focus({ preventScroll: true });
+  }
+
+  function syncLook() {
+    const enabled = config.allowVisitorCustomization === true;
+    if (!enabled && (lookPanel.contains(shadow.activeElement) || shadow.activeElement === lookBtn)) {
+      (config.chatEnabled ? askBtn : stageCard).focus({ preventScroll: true });
+    }
+    lookBtn.hidden = !enabled;
+    if (!enabled) {
+      setLookOpen(false);
+      displayAvatar = config.avatar;
+    } else if (lookEditor) {
+      lookEditor.setOwnerAvatar(config.avatar);
+    } else {
+      lookEditor = createVisitorCustomizer({
+        panel: lookPanel,
+        ownerAvatar: config.avatar,
+        storageKey: internalOpts.preview ? null : lookKey,
+        onChange: avatar => { displayAvatar = avatar; },
+      });
+    }
+  }
+  function openCustomizer() {
+    if (config.allowVisitorCustomization !== true || destroyed) return false;
+    showcase.end();
+    rootEl.classList.remove("is-minimized");
+    setLookOpen(true);
+    return true;
+  }
+  lookBtn.onclick = () => {
+    if (lookPanel.hidden) openCustomizer();
+    else setLookOpen(false, true);
+  };
+  for (const button of lookPanel.querySelectorAll(".bc-look-close, .bc-look-done")) {
+    button.onclick = () => setLookOpen(false, true);
+  }
+  lookPanel.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setLookOpen(false, true);
+    }
+  });
+  syncLook();
 
   const STATUS_READY = "Ready";
   const setSpeakBtn = (playing) => {
-    speakBtn.innerHTML = `${playing ? ICONS.stop : ICONS.play}<span>${playing ? "Stop" : "Speak"}</span>`;
+    speakBtn.innerHTML = `${playing ? ICONS.stop : ICONS.play}<span>${playing ? "Stop" : config.speechEnabled ? "Speak" : "Greet"}</span>`;
   };
 
   /** Writes every piece of configured text into the DOM (safe for any characters). */
@@ -830,8 +1047,9 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     pillLabel.textContent = name;
     minPill.title = `Open ${name}`;
     chatPanel.setAttribute("aria-label", `Chat with ${name}`);
-    stageCard.title = `Click to hear ${name}`;
-    stageCard.setAttribute("aria-label", `${name}. Play or stop the spoken greeting.`);
+    const guiding = rootEl.classList.contains("is-guiding");
+    stageCard.title = guiding ? "Replay this answer" : config.speechEnabled ? `Click to hear ${name}` : `Show the greeting from ${name}`;
+    stageCard.setAttribute("aria-label", stageCard.title);
   }
   const syncStageShape = () => {
     const circle = config.avatar.stageShape === "circle" && config.avatar.framing !== "cutout";
@@ -839,6 +1057,11 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   };
   applyIdentityText();
   syncStageShape();
+  if (!config.speechEnabled) {
+    muteBtn.style.display = "none";
+    speakBtn.title = "Show the greeting";
+    setSpeakBtn(false);
+  }
 
   if (!config.chatEnabled) {
     askBtn.style.display = "none";
@@ -849,16 +1072,17 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
   // Initialize AIML Engine (your rules on top, the base small-talk layer underneath)
   const botPropsFromConfig = () => {
+    if (!HAS_CHAT) return {};
     const facts = config.facts && typeof config.facts === "object" ? config.facts : {};
     const props = { name: config.name, role: config.role, company: config.company, website: config.website };
     for (const { key } of BOT_FACTS) props[key] = String(facts[key] ?? "").trim();
     return props;
   };
-  const aiml = new AIMLEngine({
+  const aiml = HAS_CHAT ? new AIMLEngine({
     botProps: botPropsFromConfig(),
-    baseXml: config.baseBrain === false ? "" : BASE_AIML_XML,
+    baseXml: HAS_BASE_BRAIN && config.baseBrain !== false ? BASE_AIML_XML : "",
     persona: config.persona,
-  });
+  }) : null;
   const defaultChips = () => aiml.quickChips.map((c) => ({ label: c, query: c }));
 
   async function initAimlBrain() {
@@ -894,7 +1118,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   }
 
   // The conversation carries over from page to page within a browser tab (never in the studio preview).
-  const rememberChat = config.rememberChat !== false && config.position !== "contained";
+  const rememberChat = HAS_CHAT && config.rememberChat !== false && config.position !== "contained" && !internalOpts.preview;
   const sessionKey = `bot-computer:chat:${String(config.sessionId || config.name || "bot").toLowerCase()}`;
   function saveSession() {
     if (!rememberChat) return;
@@ -949,6 +1173,27 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   const anim = createAnimState();
   setAvatarMood(anim, restingMood());
   const pointer = { nx: 0, ny: 0, active: false };
+  const showcase = HAS_CHAT ? createPageShowcase({
+    root: rootEl, stage: stageCard, host: hostEl, parent: parentTarget, position: config.position, anim,
+    onModeChange: applyIdentityText,
+    onReturn: () => (chatPanel.classList.contains("open") ? inputEl : stageCard).focus({ preventScroll: true }),
+    onTourDepart: () => {
+      stopSpeech();
+      triggerAvatarEmote(anim, "rest");
+      unlockAudio();
+    },
+    onTourStop: (stop, firstVisit) => {
+      if (firstVisit) {
+        appendChatMessage("bot", replyDisplayText(stop) || `[Show ${stop.target}]`);
+        saveSession();
+      }
+      playAnswer(stop);
+    },
+    onTourEnd: () => {
+      stopSpeech();
+      triggerAvatarEmote(anim, "rest");
+    },
+  }) : { end() {}, refresh() { return null; } };
   let ttsVoice = null;
   let audioCtx = null;
   let sourceNode = null;
@@ -959,6 +1204,8 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   let destroyed = false;
   let rafId = 0;
   let captionTimer = 0;
+  let speechRevision = 0;
+  let lastReply = null;
   // Inline cues ([wave], [wink], mood tags) for the line being spoken, and a clock for silent playback
   let cueTimeline = null;
   let silentCueStartMs = 0;
@@ -977,6 +1224,7 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   window.addEventListener("pointermove", onPointerMove, { passive: true });
 
   function stopSpeech() {
+    speechRevision++;
     if (sourceNode) {
       sourceNode.onended = null;
       try {
@@ -1034,23 +1282,37 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     });
   }
 
-  const enginePromise = loadTtsEngine({
-    wasmUrl: config.wasmUrl,
-    wasmBytes: internalOpts.wasmBytes,
-    embeddedWasmGzBase64:
-      internalOpts.embeddedWasmGzBase64 ||
-      (typeof globalThis !== "undefined" ? globalThis.__BOT_COMPUTER_EMBEDDED_WASM_GZ__ : ""),
-    bindTTSFn: internalOpts.bindTTSFn,
-  })
-    .then(({ TTS }) => {
-      ttsVoice = new TTS(config.voice || "female");
-      return ttsVoice;
-    })
-    .catch((err) => {
-      console.error("[bot.computer] TTS engine load error:", err);
-      headStatusEl.textContent = "Text only (voice unavailable)";
-      return null;
-    });
+  let enginePromise;
+  function requestVoice() {
+    if (HAS_SPEECH && config.speechEnabled) {
+      enginePromise ??= loadTtsEngine({
+        wasmUrl: config.wasmUrl,
+        wasmBytes: internalOpts.wasmBytes,
+        embeddedWasmGzBase64: internalOpts.embeddedWasmGzBase64 || globalThis.__BOT_COMPUTER_EMBEDDED_WASM_GZ__,
+        bindTTSFn: internalOpts.bindTTSFn,
+      }).then(({ TTS }) => {
+        if (destroyed) return null;
+        ttsVoice = new TTS(config.voice || "female");
+        config.voice = ttsVoice.settings;
+        return ttsVoice;
+      }).catch(error => {
+        console.error("[bot.computer] TTS engine load error:", error);
+        headStatusEl.textContent = "Text only (voice unavailable)";
+        return null;
+      });
+      return enginePromise;
+    }
+    return Promise.resolve(null);
+  }
+
+  // Unlock during the original visitor gesture, before downloading the voice or painting a reply.
+  function unlockAudio() {
+    const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (HAS_SPEECH && config.speechEnabled && !isMuted && Ctx) {
+      audioCtx ??= new Ctx();
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    }
+  }
 
   /**
    * Speaks a line. Avatar actions written inline (`[wave]`, `[wink]`, ...) are removed from the
@@ -1059,6 +1321,8 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
    * actions of its own.
    */
   async function speakText(rawText, { emote = "", defaultEmote = "", cues = null, cueWords = 0 } = {}) {
+    stopSpeech();
+    const revision = speechRevision;
     const parsed = cues ? { speechText: String(rawText), cues, wordCount: cueWords } : parseSpeechCues(rawText);
     const hasActions = parsed.cues.some((c) => c.type === "action");
     const startEmote = emote || (hasActions ? "" : defaultEmote);
@@ -1073,25 +1337,30 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
     // Words, or a sound the voice makes such as "[laugh]": either is something to hear.
     const hasWords = Boolean(stripSpeechTags(parsed.speechText)) || parsed.cues.some((c) => c.sound);
-    const voice = hasWords ? ttsVoice || (await enginePromise) : null;
+    if (hasWords) unlockAudio();
+    const voice = HAS_SPEECH && config.speechEnabled && hasWords && !isMuted ? ttsVoice || (await requestVoice()) : null;
+    if (destroyed || revision !== speechRevision) return;
     if (!voice || isMuted) {
-      stopSpeech();
       playCuesSilently();
+      if (!config.speechEnabled && config.showCaptions && hasWords) {
+        captionEl.textContent = stripSpeechTags(parsed.speechText);
+        captionEl.classList.add("visible");
+        clearTimeout(captionTimer);
+        captionTimer = setTimeout(() => captionEl.classList.remove("visible"), Math.max(3500, Math.min(15000, parsed.wordCount * 350)));
+      }
       return;
     }
 
-    stopSpeech();
-    const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
-    if (!Ctx) {
+    if (!audioCtx) {
       playCuesSilently();
       return;
     }
-    audioCtx ??= new Ctx();
     if (audioCtx.state === "suspended") {
       try {
         await audioCtx.resume();
       } catch {}
     }
+    if (destroyed || revision !== speechRevision) return;
     if (audioCtx.state === "suspended") {
       // Browser autoplay policy requires first user gesture
       promptBadge.hidden = false;
@@ -1137,39 +1406,52 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   }
 
   async function handleUserQuestion(queryText, displayLabel) {
+    if (!HAS_CHAT) return;
     const q = String(queryText || "").trim();
     if (!q) return;
+    const departure = stageCard.getBoundingClientRect();
+    if (!lookPanel.hidden) setLookOpen(false);
     if (!chatPanel.classList.contains("open")) {
       chatPanel.classList.add("open");
       rootEl.classList.add("chat-is-open");
       captionEl.classList.remove("visible");
     }
     appendChatMessage("user", displayLabel || q);
-    // Matching takes about a millisecond, so the answer is shown at once and the voice starts with it.
     const res = aiml.reply(q);
-    appendChatMessage("bot", res.displayText);
+    lastReply = res;
+    const stop = res.tour?.length ? showcase.startTour(res.tour, departure) : null;
+    if (!stop) {
+      appendChatMessage("bot", replyDisplayText(res));
+      showcase.start(res.showcase, res.displayText || "");
+    }
     renderChips(res.chips && res.chips.length ? res.chips : defaultChips());
     saveSession();
+    if (!stop) await playAnswer(res);
+  }
 
+  async function playAnswer(answer) {
+    stopSpeech();
+    if (showcase.currentStop) triggerAvatarEmote(anim, "rest");
+    const revision = speechRevision;
     // Wake the audio output while still inside the click or key press, let the answer paint,
     // then render the voice.
-    const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
-    if (Ctx && !isMuted) {
-      audioCtx ??= new Ctx();
-      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
-    }
+    unlockAudio();
     await new Promise((resolve) => {
       requestAnimationFrame(() => setTimeout(resolve, 0));
       setTimeout(resolve, 80); // animation frames do not fire in a background tab
     });
-    if (destroyed) return;
-    await speakText(res.speechText, { cues: res.cues, cueWords: res.cueWords });
+    if (destroyed || revision !== speechRevision) return;
+    await speakText(answer.speechText, { cues: answer.cues, cueWords: answer.cueWords });
   }
 
   // Wire UI events
   const toggleGreeting = () => {
+    if (anim.guideTravel) return;
     if (isPlaying) stopSpeech();
-    else speakText(config.greeting, { defaultEmote: "wave" });
+    else if (rootEl.classList.contains("is-guiding") && lastReply) {
+      const answer = showcase.currentStop || lastReply;
+      speakText(answer.speechText, { cues: answer.cues, cueWords: answer.cueWords });
+    } else speakText(config.greeting, { defaultEmote: "wave" });
   };
   stageCard.onclick = toggleGreeting;
   stageCard.onkeydown = (e) => {
@@ -1187,14 +1469,17 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   };
 
   askBtn.onclick = () => {
-    const open = chatPanel.classList.toggle("open");
+    const wasCustomizing = !lookPanel.hidden;
+    if (wasCustomizing) setLookOpen(false);
+    const open = wasCustomizing || !chatPanel.classList.contains("open");
+    chatPanel.classList.toggle("open", open);
     rootEl.classList.toggle("chat-is-open", open);
     if (open) {
       captionEl.classList.remove("visible");
       if (!messagesEl.children.length) {
         appendChatMessage("bot", stripSpeechTags(config.greeting));
       }
-      setTimeout(() => inputEl.focus({ preventScroll: true }), 60);
+      inputEl.focus({ preventScroll: true });
     }
     saveSession();
   };
@@ -1218,11 +1503,14 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
   minBtn.onclick = () => {
     stopSpeech();
+    if (!lookPanel.hidden) setLookOpen(false);
     rootEl.classList.add("is-minimized");
+    minPill.focus({ preventScroll: true });
   };
 
   minPill.onclick = () => {
     rootEl.classList.remove("is-minimized");
+    minBtn.focus({ preventScroll: true });
   };
 
   formEl.onsubmit = (e) => {
@@ -1251,19 +1539,27 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
 
   // Detect narrow host container (e.g. 375px mobile preview frame on desktop)
   let resizeObs = null;
-  if (config.position === "contained" && typeof ResizeObserver === "function") {
+  if (["inline", "contained"].includes(config.position) && typeof ResizeObserver === "function") {
     const syncNarrow = () => {
-      rootEl.classList.toggle("is-narrow-host", (parentTarget.clientWidth || 999) <= 520);
+      rootEl.classList.toggle("is-narrow-host", parentTarget.clientWidth <= 640);
+      if (config.position === "contained") rootEl.style.setProperty("--bc-host-h", `${parentTarget.clientHeight}px`);
     };
     syncNarrow();
     resizeObs = new ResizeObserver(syncNarrow);
     resizeObs.observe(parentTarget);
   }
 
-  // Continuous 60fps Render Loop
+  let stageOnScreen = typeof IntersectionObserver !== "function";
+  const visibilityObserver = typeof IntersectionObserver === "function" ? new IntersectionObserver(([entry]) => {
+    stageOnScreen = entry.isIntersecting;
+  }) : null;
+  visibilityObserver?.observe(stageCard);
+
+  // Speech and cue timing continue while the avatar is outside the viewport.
   function tick(nowMs) {
     if (destroyed) return;
     if (!document.hidden && !rootEl.classList.contains("is-minimized")) {
+      const guidePointer = showcase.refresh();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const cw = Math.max(120, Math.floor((stageCard.clientWidth || dims.w) * dpr));
       const ch = Math.max(120, Math.floor((stageCard.clientHeight || dims.h) * dpr));
@@ -1289,20 +1585,33 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
         anim,
         nowMs,
         sampled,
-        performance.now() < typingUntilMs ? typingPointer : config.eyeTracking ? pointer : null,
+        guidePointer || (performance.now() < typingUntilMs ? typingPointer : config.eyeTracking ? pointer : null),
         config.voice?.pitchHz || 160
       );
-      const ctx = canvas.getContext("2d");
-      drawBotAvatar(ctx, cw, ch, config.avatar, anim, nowMs, { showVoiceWaves: true });
+      if (stageOnScreen || anim.guideTravel) {
+        const guided = rootEl.classList.contains("is-guiding");
+        const avatar = guided ? { ...displayAvatar, framing: "half", stageShape: "cutout", bgStyle: "transparent" } : displayAvatar;
+        const framing = anim.guideTravel?.phase === "walk" ? "full" : avatar.framing;
+        const options = { framing, smoothFraming: guided, showVoiceWaves: !guided };
+        if (!HAS_WEBGL || config.renderMode === "2d") {
+          modelCanvas.hidden = true;
+          drawBotAvatar(canvas.getContext("2d"), cw, ch, framing === avatar.framing ? avatar : { ...avatar, framing }, anim, nowMs, options);
+        } else {
+          options.force = modelCanvas.hidden;
+          modelCanvas.hidden = false;
+          liveAvatar ??= new LiveAvatar(modelCanvas, canvas, { orbitControls: false, view: "front" });
+          liveAvatar.render(avatar, anim, nowMs, options);
+        }
+      }
     }
     rafId = requestAnimationFrame(tick);
   }
 
-  await initAimlBrain();
+  if (HAS_CHAT) await initAimlBrain();
   restoreSession();
   // Get the matcher up to speed while the page is idle, before the first question arrives.
   (globalThis.requestIdleCallback || ((fn) => setTimeout(fn, 250)))(() => {
-    if (!destroyed) aiml.warmUp();
+    if (HAS_CHAT && !destroyed) aiml.warmUp();
   });
   if (config.chatEnabled && config.chatStartOpen && !messagesEl.children.length) {
     appendChatMessage("bot", stripSpeechTags(config.greeting));
@@ -1310,13 +1619,14 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
   rafId = requestAnimationFrame(tick);
 
   if (config.autoGreet) {
-    enginePromise.then(() => {
-      speakText(config.greeting, { defaultEmote: "wave" });
+    requestVoice().then(() => {
+      if (!destroyed && !lastReply && !isPlaying) speakText(config.greeting, { defaultEmote: "wave" });
     });
   }
 
   return {
     hostEl,
+    openCustomizer,
     say: (text, emote = "") => speakText(text, { emote }),
     ask: (question) => handleUserQuestion(question),
     stop: stopSpeech,
@@ -1338,28 +1648,43 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     mood: (name) => setAvatarMood(anim, name),
     /** Forgets the conversation so far, on screen and in the bot's memory. */
     clearChat() {
+      showcase.end();
+      stopSpeech();
+      lastReply = null;
       messagesEl.replaceChildren();
       transcript.length = 0;
-      aiml.resetSession();
-      renderChips(defaultChips());
+      if (HAS_CHAT) {
+        aiml.resetSession();
+        renderChips(defaultChips());
+      }
       try {
         sessionStorage.removeItem(sessionKey);
       } catch {}
     },
     updateConfig(patch = {}) {
       const propsBefore = JSON.stringify(botPropsFromConfig());
+      const identityChanged = ["name", "role", "company"].some(key => patch[key] !== undefined && patch[key] !== config[key]);
       if (patch.name !== undefined) config.name = patch.name;
       if (patch.role !== undefined) config.role = patch.role;
       if (patch.company !== undefined) config.company = patch.company;
       if (patch.facts !== undefined) config.facts = { ...(patch.facts || {}) };
       const propsChanged = JSON.stringify(botPropsFromConfig()) !== propsBefore;
       if (patch.greeting !== undefined) config.greeting = patch.greeting;
+      if (HAS_SPEECH && patch.speechEnabled !== undefined && config.speechEnabled !== Boolean(patch.speechEnabled)) {
+        config.speechEnabled = Boolean(patch.speechEnabled);
+        stopSpeech();
+        muteBtn.style.display = config.speechEnabled ? "" : "none";
+        speakBtn.title = config.speechEnabled ? "Speak the greeting" : "Show the greeting";
+        setSpeakBtn(false);
+      }
+      if (patch.renderMode !== undefined) config.renderMode = patch.renderMode;
       if (patch.eyeTracking !== undefined) config.eyeTracking = patch.eyeTracking;
       if (patch.showCaptions !== undefined) config.showCaptions = patch.showCaptions;
-      if (patch.chatEnabled !== undefined) {
+      if (HAS_CHAT && patch.chatEnabled !== undefined) {
         config.chatEnabled = patch.chatEnabled;
         askBtn.style.display = config.chatEnabled ? "" : "none";
         if (!config.chatEnabled) {
+          showcase.end();
           chatPanel.classList.remove("open");
           rootEl.classList.remove("chat-is-open");
         }
@@ -1368,34 +1693,45 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
         config.avatar = { ...config.avatar, ...patch.avatar };
         syncStageShape();
       }
+      if (patch.allowVisitorCustomization !== undefined) config.allowVisitorCustomization = patch.allowVisitorCustomization === true;
+      if (identityChanged && !config.sessionId) {
+        lookKey = visitorLookKey(config);
+        lookEditor = null;
+      }
+      if (identityChanged || patch.avatar || patch.allowVisitorCustomization !== undefined) syncLook();
       if (patch.voice) {
         // Keep the config current even before tts.wasm has loaded, so the voice that is
         // created later starts from the latest settings rather than the mount-time ones.
-        config.voice = { ...(typeof config.voice === "object" ? config.voice : {}), ...patch.voice };
         if (ttsVoice) {
           try {
-            ttsVoice.configure(patch.voice);
+            config.voice = ttsVoice.configure(patch.voice);
           } catch {}
+        } else if (typeof patch.voice === "string" || patch.voice.preset) {
+          config.voice = patch.voice;
+        } else {
+          const current = typeof config.voice === "string" ? { preset: config.voice } : config.voice;
+          config.voice = { ...current, ...patch.voice };
         }
       }
       if (patch.persona !== undefined) {
         config.persona = normalizePersona(patch.persona);
-        aiml.setPersona(config.persona);
+        if (HAS_CHAT) aiml.setPersona(config.persona);
         setAvatarMood(anim, restingMood());
       }
-      if (patch.baseBrain !== undefined && Boolean(patch.baseBrain) !== (config.baseBrain !== false)) {
+      if (HAS_BASE_BRAIN && patch.baseBrain !== undefined && Boolean(patch.baseBrain) !== (config.baseBrain !== false)) {
         config.baseBrain = Boolean(patch.baseBrain);
         try {
           aiml.loadBaseXML(config.baseBrain ? BASE_AIML_XML : "");
         } catch {}
       }
       // Facts and names are used inside rules, so the engine re-reads them when they change.
-      if (propsChanged) {
+      if (HAS_CHAT && propsChanged) {
         try {
           aiml.setBotProps(botPropsFromConfig());
         } catch {}
       }
-      if (patch.aimlXml !== undefined && patch.aimlXml !== config.aimlXml) {
+      if (HAS_CHAT && patch.aimlXml !== undefined && patch.aimlXml !== config.aimlXml) {
+        showcase.end();
         config.aimlXml = patch.aimlXml;
         try {
           aiml.loadXML(config.aimlXml);
@@ -1406,7 +1742,10 @@ export async function mountBotWidget(userConfig = {}, internalOpts = {}) {
     },
     destroy() {
       destroyed = true;
+      showcase.end();
       cancelAnimationFrame(rafId);
+      visibilityObserver?.disconnect();
+      liveAvatar?.dispose();
       stopSpeech();
       window.removeEventListener("pointermove", onPointerMove);
       if (resizeObs) resizeObs.disconnect();

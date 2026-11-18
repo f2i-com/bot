@@ -1,6 +1,9 @@
 bot.computer
 Copyright 2026 f2i.com
 
+The 3D avatar meshes, rig, and movements are adapted from the gfxx anime
+studio by f2i.com, distributed under the Apache License, Version 2.0.
+
 This product includes the tts.wasm speech synthesizer from the tts project
 (https://github.com/f2i-com/tts), by the same authors, distributed under the
 Apache License, Version 2.0.

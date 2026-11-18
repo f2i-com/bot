@@ -67,6 +67,10 @@ measurements (pitch, vocal tract length and formant settings) taken from the
 CMU ARCTIC speech databases by the Language Technologies Institute at Carnegie
 Mellon University (http://festvox.org/cmu_arctic/). No recordings are included.
 
+## Instrument Serif
+
+The landing page uses a Latin subset of Instrument Serif Italic by the Instrument Serif Project Authors, distributed under the SIL Open Font License 1.1. The license accompanies the font in `vendor/fonts/OFL-Instrument-Serif.txt`.
+
 ## Bricolage Grotesque
 
 The heading typeface in `vendor/fonts/bricolage-grotesque-latin-wght.woff2`.

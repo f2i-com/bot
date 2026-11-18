@@ -2,9 +2,42 @@
 // Packages `embed/bot-embed.js` + Gzipped Base64 `tts.wasm` + Customized Avatar + AIML XML
 // into a single zero-dependency local `.js` (or standalone `.html`) file!
 
-let cachedEmbedRuntimePromise = null;
-let cachedCompressedWasmB64Promise = null;
-let cachedRawWasmPromise = null;
+import { inspectAimlXml } from "./aiml-engine.js";
+import { embedRuntimeName } from "./embed-profile.js";
+
+// Prefer a question the author can try without first entering a topic or a conversation branch.
+export function pageGuideExamples(rules) {
+  const destinations = new Map();
+  for (const rule of rules) {
+    const standalone = !rule.isCatchAll && rule.that === "*" && rule.topic === "*";
+    for (const target of rule.showcases) {
+      if (!destinations.has(target)) destinations.set(target, { target, question: "", tourQuestions: [] });
+      const example = destinations.get(target);
+      if (!standalone || !rule.sample) continue;
+      if (rule.tours.some(route => route[0] === target)) {
+        if (!example.tourQuestions.includes(rule.sample)) example.tourQuestions.push(rule.sample);
+      } else if (!rule.tours.length && rule.showcases.length === 1 && !example.question) {
+        example.question = rule.sample;
+      }
+    }
+  }
+  return Array.from(destinations.values());
+}
+
+// Independent hosts and retries must not reuse another URL’s response or a failed fetch.
+const runtimeCache = new Map();
+const compressedWasmCache = new Map();
+const rawWasmCache = new Map();
+
+function loadCached(cache, url, load) {
+  if (!cache.has(url)) {
+    cache.set(url, load().catch(error => {
+      cache.delete(url);
+      throw error;
+    }));
+  }
+  return cache.get(url);
+}
 
 export function slugifyBotName(name) {
   return (
@@ -16,13 +49,11 @@ export function slugifyBotName(name) {
 }
 
 async function getRawWasmBytes(wasmUrl = "./vendor/tts/tts.wasm") {
-  if (!cachedRawWasmPromise) {
-    cachedRawWasmPromise = fetch(wasmUrl).then(async (r) => {
-      if (!r.ok) throw new Error(`Could not fetch ${wasmUrl} (${r.status})`);
-      return new Uint8Array(await r.arrayBuffer());
-    });
-  }
-  return cachedRawWasmPromise;
+  return loadCached(rawWasmCache, wasmUrl, async () => {
+    const response = await fetch(wasmUrl);
+    if (!response.ok) throw new Error(`Could not fetch ${wasmUrl} (${response.status})`);
+    return new Uint8Array(await response.arrayBuffer());
+  });
 }
 
 async function gzipBytesInBrowser(rawBytes) {
@@ -47,24 +78,18 @@ function bytesToBase64(bytes) {
 }
 
 async function getCompressedWasmBase64(wasmUrl = "./vendor/tts/tts.wasm") {
-  if (!cachedCompressedWasmB64Promise) {
-    cachedCompressedWasmB64Promise = (async () => {
-      const raw = await getRawWasmBytes(wasmUrl);
-      const gz = await gzipBytesInBrowser(raw);
-      return bytesToBase64(gz);
-    })();
-  }
-  return cachedCompressedWasmB64Promise;
+  return loadCached(compressedWasmCache, wasmUrl, async () => {
+    const raw = await getRawWasmBytes(wasmUrl);
+    return bytesToBase64(await gzipBytesInBrowser(raw));
+  });
 }
 
 async function getEmbedRuntimeSource(embedJsUrl = "./embed/bot-embed.js") {
-  if (!cachedEmbedRuntimePromise) {
-    cachedEmbedRuntimePromise = fetch(embedJsUrl).then(async (r) => {
-      if (!r.ok) throw new Error(`Could not fetch ${embedJsUrl} (${r.status})`);
-      return r.text();
-    });
-  }
-  return cachedEmbedRuntimePromise;
+  return loadCached(runtimeCache, embedJsUrl, async () => {
+    const response = await fetch(embedJsUrl);
+    if (!response.ok) throw new Error(`Could not fetch ${embedJsUrl} (${response.status})`);
+    return response.text();
+  });
 }
 
 function safeJsonForScript(obj) {
@@ -78,6 +103,18 @@ function safeForBlockComment(text) {
   return String(text).replace(/\*\//g, "* /").replace(/[\r\n]+/g, " ");
 }
 
+function exportConfig(fullBotConfig) {
+  const config = structuredClone(fullBotConfig);
+  if (config.chatEnabled === false) {
+    for (const key of ["aimlXml", "aimlUrl", "baseBrain", "facts", "chatStartOpen", "rememberChat"]) delete config[key];
+  }
+  if (config.speechEnabled === false) {
+    delete config.wasmUrl;
+    delete config.voice;
+  }
+  return config;
+}
+
 /**
  * Builds a 100% self-contained single `.js` file containing:
  *  - Compressed `tts.wasm` (24 kHz physical vocal-tract synthesizer + 200 Hz visemes)
@@ -87,11 +124,11 @@ function safeForBlockComment(text) {
  */
 export async function buildSelfContainedBotJs(fullBotConfig, urls = {}) {
   const [runtimeSrc, wasmGzB64] = await Promise.all([
-    getEmbedRuntimeSource(urls.embedJsUrl || "./embed/bot-embed.js"),
-    getCompressedWasmBase64(urls.wasmUrl || "./vendor/tts/tts.wasm"),
+    getEmbedRuntimeSource(urls.embedJsUrl || `./embed/${embedRuntimeName(fullBotConfig)}`),
+    fullBotConfig.speechEnabled === false ? null : getCompressedWasmBase64(urls.wasmUrl || "./vendor/tts/tts.wasm"),
   ]);
 
-  const cleanConfig = structuredClone(fullBotConfig);
+  const cleanConfig = exportConfig(fullBotConfig);
   delete cleanConfig.wasmUrl;
   delete cleanConfig.aimlUrl;
 
@@ -99,13 +136,13 @@ export async function buildSelfContainedBotJs(fullBotConfig, urls = {}) {
     `/*!`,
     ` * Self-Contained Website Companion Bot — Generated by bot.computer`,
     ` * Bot: ${safeForBlockComment(cleanConfig.name || "Companion")} (${safeForBlockComment(cleanConfig.role || "Assistant")})`,
-    ` * Includes: 2.5D Avatar + AIML XML Brain + Embedded tts.wasm (24 kHz Vocal-Tract Synthesizer)`,
+    ` * Renderer: ${cleanConfig.renderMode === "2d" ? "Canvas 2D" : "WebGL with Canvas fallback"}`,
     // No literal closing script tag in this comment: the bundle is also inlined into a <script>
     // block by the standalone demo page, where that text would end the script early.
     ` * Usage: add a script tag with src="./${slugifyBotName(cleanConfig.name)}-bot.js" and the defer attribute.`,
     ` */`,
     `(function(){`,
-    `  globalThis.__BOT_COMPUTER_EMBEDDED_WASM_GZ__ = "${wasmGzB64}";`,
+    ...(wasmGzB64 ? [`  globalThis.__BOT_COMPUTER_EMBEDDED_WASM_GZ__ = "${wasmGzB64}";`] : []),
     `  globalThis.__BOT_COMPUTER_AUTO_CONFIG__ = ${safeJsonForScript(cleanConfig)};`,
     `})();`,
     runtimeSrc,
@@ -127,6 +164,15 @@ export async function buildSelfContainedDemoHtml(fullBotConfig, urls = {}) {
     String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const botName = escHtml(fullBotConfig.name || "Aria");
   const company = escHtml(fullBotConfig.company || "Your Website");
+  const guideRules = fullBotConfig.chatEnabled !== false && fullBotConfig.aimlXml
+    ? inspectAimlXml(fullBotConfig.aimlXml).rules : [];
+  const destinations = pageGuideExamples(guideRules || []).map(({ target, question, tourQuestions }) => `
+    <section class="card" data-bot-showcase="${escHtml(target)}" aria-label="${escHtml(target)}">
+      <h2>${escHtml(target)}</h2>
+      ${question ? `<p>Ask the avatar “${escHtml(question)}”.</p>` : ""}
+      ${tourQuestions.map(q => `<p>Start a tour by asking “${escHtml(q)}”.</p>`).join("")}
+      <code>data-bot-showcase="${escHtml(target)}"</code>
+    </section>`).join("");
 
   return `<!doctype html>
 <html lang="en">
@@ -163,6 +209,8 @@ export async function buildSelfContainedDemoHtml(fullBotConfig, urls = {}) {
       color: #3b4660;
     }
     .card strong { color: #0d1322; }
+    .card h2 { margin: 0 0 8px; font-size: 20px; overflow-wrap: anywhere; }
+    .card code { overflow-wrap: anywhere; }
     code {
       background: #e8ecf3;
       padding: 2px 6px;
@@ -176,13 +224,13 @@ export async function buildSelfContainedDemoHtml(fullBotConfig, urls = {}) {
     <h1>Meet ${botName}, embedded on ${company}.</h1>
     <p>
       Move your cursor around this page and <strong>${botName}</strong> follows it.
-      Press <strong>Speak</strong> on the companion in the corner to hear 24 kHz speech synthesized
-      in your browser with 200 Hz lip sync, or press <strong>Ask</strong> to try the AIML Q&amp;A brain.
+      ${fullBotConfig.speechEnabled === false ? "Press <strong>Greet</strong> to see the greeting." : "Press <strong>Speak</strong> to hear the greeting."}${fullBotConfig.chatEnabled === false ? "" : " Press <strong>Ask</strong> to try a conversation."}
+      ${fullBotConfig.allowVisitorCustomization === true ? "Open <strong>Customize</strong> on the widget to try a different hairstyle, outfit or color." : ""}
     </p>
     <div class="card">
-      <strong>Nothing else to load.</strong> This one HTML file holds the avatar, the voice settings,
-      the AIML knowledge base and a compressed <code>tts.wasm</code>. It works offline.
+      This HTML file contains your avatar and all the features you selected. It works offline.
     </div>
+    ${destinations}
   </main>
   <script>
 ${selfContainedJs}
@@ -191,58 +239,32 @@ ${selfContainedJs}
 </html>`;
 }
 
-/** Generates copy-pasteable HTML snippets for all 3 integration modes. */
-export function generateEmbedSnippets(fullBotConfig) {
+/** Build install snippets against the same hosted release as the running studio. */
+export function generateEmbedSnippets(fullBotConfig, studioBase = "https://bot.computer/") {
   const slug = slugifyBotName(fullBotConfig.name);
-  const externalConfig = structuredClone(fullBotConfig);
+  const name = embedRuntimeName(fullBotConfig);
+  const runtimeUrl = new URL("embed/" + name, studioBase).href;
+  const hostedConfig = exportConfig({ ...fullBotConfig, wasmUrl: new URL("vendor/tts/tts.wasm", studioBase).href });
+  const externalConfig = exportConfig({ ...fullBotConfig, wasmUrl: "./tts.wasm", aimlUrl: `./${slug}-brain.aiml` });
   delete externalConfig.aimlXml;
-  externalConfig.wasmUrl = "./tts.wasm";
-  externalConfig.aimlUrl = `./${slug}-brain.aiml`;
 
-  const hostedConfig = { ...externalConfig, wasmUrl: "https://bot.computer/vendor/tts/tts.wasm" };
+  // Site-owner text can include quotes, literal entity names, and AIML markup.
+  function scriptTag(src, config) {
+    const data = JSON.stringify(config).replace(/&/g, "&amp;").replace(/'/g, "&#39;").replace(/</g, "&lt;");
+    return `<script src="${src}" data-config='${data}' defer></script>`;
+  }
 
-  const selfContainedHtml = [
-    `<!-- Put ${slug}-bot.js next to your page and add this tag. -->`,
-    `<!-- It holds the avatar, voice, AIML brain and tts.wasm. -->`,
-    `<script src="./${slug}-bot.js" defer></script>`,
-  ].join("\n");
-
-  // The config sits in a single-quoted attribute: escape `&` first so text such as "Q&amp;A"
-  // survives HTML parsing unchanged, then the quote character itself.
-  const attrJson = JSON.stringify(hostedConfig).replace(/&/g, "&amp;").replace(/'/g, "&#39;");
-
-  const multiFileHtml = [
-    `<!-- The runtime and tts.wasm load from bot.computer here, -->`,
-    `<!-- or host both yourself. Put ${slug}-brain.aiml by your page. -->`,
-    `<script`,
-    `  src="https://bot.computer/embed/bot-embed.js"`,
-    `  data-wasm="https://bot.computer/vendor/tts/tts.wasm"`,
-    `  data-aiml="./${slug}-brain.aiml"`,
-    `  data-config='${attrJson}'`,
-    `  defer`,
-    `></script>`,
-  ].join("\n");
-
-  // No placeholder `aimlXml` here: any non-empty aimlXml wins over aimlUrl inside the widget, so a
-  // placeholder string would silently ship a bot whose brain is empty.
+  const selfContainedHtml = `<script src="./${slug}-bot.js" defer></script>`;
+  const hostedHtml = scriptTag(runtimeUrl, hostedConfig);
+  const multiFileHtml = scriptTag("./bot-embed.js", externalConfig);
   const sdkJs = [
-    `<!-- Mount the bot yourself and drive it from your own code. -->`,
-    `<script src="https://bot.computer/embed/bot-embed.js" data-manual="true"></script>`,
-    `<script>`,
-    `  window.addEventListener("DOMContentLoaded", async () => {`,
-    `    // The brain loads from aimlUrl. To inline it instead, add aimlXml: "<aiml>...</aiml>".`,
-    `    const bot = await BotComputer.mount(${JSON.stringify(hostedConfig, null, 2)
-      .replace(/</g, "\\u003c")
-      .replace(/\n/g, "\n    ")});`,
-    ``,
-    `    // Speak or ask from anything on your page:`,
-    `    // bot.say("Welcome! Let me show you around.", "wave");`,
-    `    // bot.ask("Pricing & Plans");`,
-    `  });`,
+    `<script src="${runtimeUrl}" data-manual="true"></script>`,
+    `<script type="module">`,
+    `  const bot = await BotComputer.runtimes[${JSON.stringify(name)}].mount(${safeJsonForScript(hostedConfig).replace(/\n/g, "\n  ")});`,
+    `  // From a button on your page: bot.emote("wave") or bot.ask("What moves can you do?")`,
     `</script>`,
   ].join("\n");
-
-  return { slug, selfContainedHtml, multiFileHtml, sdkJs };
+  return { slug, selfContainedHtml, hostedHtml, multiFileHtml, sdkJs };
 }
 
 export function triggerBrowserDownload(filename, content, mimeType = "application/octet-stream") {

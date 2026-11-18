@@ -1,0 +1,54 @@
+{
+  "bot-embed.js": {
+    "bytes": 521252,
+    "gzip": 169507
+  },
+  "bot-2d-voice-chat.js": {
+    "bytes": 397838,
+    "gzip": 121510
+  },
+  "bot-2d-voice-rules.js": {
+    "bytes": 235284,
+    "gzip": 80668
+  },
+  "bot-2d-voice-avatar.js": {
+    "bytes": 158925,
+    "gzip": 54156
+  },
+  "bot-2d-silent-chat.js": {
+    "bytes": 386265,
+    "gzip": 118073
+  },
+  "bot-2d-silent-rules.js": {
+    "bytes": 223711,
+    "gzip": 77262
+  },
+  "bot-2d-silent-avatar.js": {
+    "bytes": 147054,
+    "gzip": 50551
+  },
+  "bot-3d-voice-chat.js": {
+    "bytes": 490369,
+    "gzip": 160653
+  },
+  "bot-3d-voice-rules.js": {
+    "bytes": 327815,
+    "gzip": 119755
+  },
+  "bot-3d-voice-avatar.js": {
+    "bytes": 251394,
+    "gzip": 93363
+  },
+  "bot-3d-silent-chat.js": {
+    "bytes": 478829,
+    "gzip": 157133
+  },
+  "bot-3d-silent-rules.js": {
+    "bytes": 316275,
+    "gzip": 116314
+  },
+  "bot-3d-silent-avatar.js": {
+    "bytes": 239579,
+    "gzip": 89865
+  }
+}

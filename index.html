@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Animated talking avatars for your website | bot.computer</title>
-  <meta name="description" content="Make an animated talking avatar for your website. Sculpt it, give it a voice and an AIML chat brain, and embed it with one script. No servers or API keys.">
+  <meta name="description" content="Create a talking 2D or 3D avatar for your website. Shape its face, choreograph movements, give it a voice and chat rules, and embed it with one script.">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
   <meta name="author" content="f2i.com">
   <meta name="color-scheme" content="light dark">
@@ -21,14 +21,14 @@
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="A cartoon website companion saying “Hi! Welcome to our website!” next to the headline “Animated speaking companions for your website”.">
+  <meta property="og:image:alt" content="Aria on the interactive 3D avatar stage beside the headline “Give your site some character.”">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="bot.computer: animated talking avatars for your website">
   <meta name="twitter:description" content="Sculpt a character, give it a voice and an AIML chat brain, and embed it on any site with one script. Runs entirely in the browser.">
   <meta name="twitter:image" content="https://bot.computer/assets/share-card.jpg">
-  <meta name="twitter:image:alt" content="A cartoon website companion saying “Hi! Welcome to our website!” next to the headline “Animated speaking companions for your website”.">
+  <meta name="twitter:image:alt" content="Aria on the interactive 3D avatar stage beside the headline “Give your site some character.”">
 
-  <meta name="theme-color" content="#f3f5f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#f7f7f2" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#090d18" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="./favicon.ico" sizes="32x32">
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
@@ -86,6 +86,7 @@
         "license": "https://www.apache.org/licenses/LICENSE-2.0",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "featureList": [
+          "Rigged 3D characters with walking, dancing, and word-timed gestures",
           "Sculpt the avatar's face and body by dragging handles on the canvas",
           "24 kHz speech synthesized in the browser from a physical vocal-tract model",
           "200 Hz lip sync driven by the synthesizer's articulator data",
@@ -103,6 +104,10 @@
   <!-- Icon sprite. Line icons adapted from Lucide (ISC License, lucide.dev). -->
   <svg xmlns="http://www.w3.org/2000/svg" class="icon-sprite" aria-hidden="true" focusable="false">
     <defs>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+      <symbol id="i-hand" viewBox="0 0 24 24"><path d="m7.5 12-2-4a1.5 1.5 0 0 1 2.7-1.3l2.1 4.4L7.5 4.8a1.5 1.5 0 0 1 2.8-1.1l2.6 6-1.5-5a1.5 1.5 0 0 1 2.9-.9l1.7 5.5-.8-3.3a1.5 1.5 0 0 1 2.9-.6l1.4 6c.9 3.8.2 7.1-3.3 8.6-3.4 1.5-6.5.3-8.7-2.2l-3.4-4a1.5 1.5 0 0 1 2.1-2.1l2.3 2"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 9l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2.5"/><ellipse cx="17" cy="16" rx="3" ry="2.5"/></symbol>
+      <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="14" cy="4" r="2"/><path d="m7 13 3-5 3-1 2 4 4 2m-6-5-2 7 5 6m-5-6-4 6"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 4.8v14.4a.6.6 0 0 0 .92.5l11.3-7.2a.6.6 0 0 0 0-1L8.42 4.3a.6.6 0 0 0-.92.5z" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.2" fill="currentColor" stroke="none"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></symbol>
@@ -162,7 +167,7 @@
         <a href="#top" class="nav-link" data-spy="top">Overview</a>
         <a href="#studioSection" class="nav-link" data-spy="studio">Studio</a>
         <a href="#studioSection" data-jump-tab="tabChat" class="nav-link" data-spy="chat">Chat brain</a>
-        <a href="#embedSection" class="nav-link" data-spy="embed">Preview and export</a>
+        <a href="#embedSection" class="nav-link" data-spy="embed">Export</a>
         <a href="#faqSection" class="nav-link" data-spy="faq">FAQ</a>
       </nav>
 
@@ -187,104 +192,78 @@
     <!-- ================================================================== -->
     <section class="hero-section" aria-label="Introduction">
       <div class="hero-copy">
-        <h1 class="hero-title">Animated speaking companions for your website, sculpted by you.</h1>
-
-        <p class="hero-lead">
-          Inspired by classic SitePal web hosts and rebuilt from first principles. Shape your avatar’s face and body right on the canvas, drive <strong>200&nbsp;Hz vocal-tract lip sync</strong> from <code>tts.wasm</code>, add an <strong>AIML Q&amp;A chatbot</strong>, and embed the whole thing as one JavaScript file.
-        </p>
-
+        <h1 class="hero-title">Give your site <em>some character.</em></h1>
+        <p class="hero-lead">Create a talking character in 2D or 3D. Shape its face, give it a voice, and bring it to your website with a single file.</p>
         <div class="hero-cta-row">
-          <a href="#studioSection" class="btn lg primary"><svg class="ic"><use href="#i-sculpt"/></svg>Design your bot</a>
-          <a href="./conversation/" class="btn lg talk-cta" id="heroTalkBtn" title="Have a spoken conversation with a character: it listens, answers and talks back"><svg class="ic"><use href="#i-mic"/></svg><span class="lbl-long">Start a conversation</span><span class="lbl-short">Conversation</span></a>
-          <button type="button" id="heroSpeakBtn" class="btn lg"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Hear the greeting</span></button>
-          <a href="./embed-demo.html" target="_blank" rel="noopener" class="btn lg subtle"><span class="lbl-long">See it on a sample site</span><span class="lbl-short">Sample site</span><svg class="ic"><use href="#i-external"/></svg></a>
+          <a href="#studioSection" class="btn lg primary">Open the studio <svg class="ic"><use href="#i-arrow-right"/></svg></a>
+          <a href="./conversation/" class="btn lg talk-cta" id="heroTalkBtn"><svg class="ic"><use href="#i-mic"/></svg>Start a conversation</a>
         </div>
-
-        <p class="hero-note">Runs entirely in the browser. No servers, no API keys, no tracking.</p>
-
-        <dl class="hero-specs">
-          <div class="spec-item">
-            <dt>200 Hz</dt>
-            <dd>Jaw, tongue and lip positions every 5&nbsp;ms</dd>
-          </div>
-          <div class="spec-item">
-            <dt>24 kHz</dt>
-            <dd>Speech from a physical vocal-tract model</dd>
-          </div>
-          <div class="spec-item">
-            <dt>AIML 2.0</dt>
-            <dd>A Q&amp;A brain you edit as XML</dd>
-          </div>
-          <div class="spec-item">
-            <dt>1 file</dt>
-            <dd>Avatar, voice and brain in a single <code>.js</code></dd>
-          </div>
-        </dl>
+        <p class="hero-note"><svg class="ic"><use href="#i-desktop"/></svg> Runs locally in your browser</p>
       </div>
 
-      <!-- Live companion card -->
-      <div class="hero-showcase-card">
-        <div class="showcase-top">
-          <div class="persona-pills" id="heroPersonaPills" role="group" aria-label="Try a companion"></div>
-          <span class="live-status-pill is-loading" id="heroEngineBadge" role="status">Loading voice…</span>
+      <div class="hero-showcase-card" id="heroShowcase" data-character="aria">
+        <div class="hero-stage">
+          <div class="hero-avatar-box" id="heroAvatarBox" role="button" tabindex="0" aria-label="Play or stop the spoken greeting">
+            <canvas id="heroCanvas" width="520" height="390"></canvas>
+            <canvas id="hero3dCanvas" width="520" height="390" aria-hidden="true"></canvas>
+          </div>
+          <div class="stage-nameplate">
+            <strong id="heroBotName">Aria</strong><span id="heroBotRole">Website Concierge</span>
+            <span class="live-status-pill is-loading" id="heroEngineBadge" role="status">Loading voice…</span>
+          </div>
+          <div class="hero-mode" role="group" aria-label="Avatar style">
+            <button type="button" data-hero-mode="2d" aria-pressed="false">2D</button>
+            <button type="button" data-hero-mode="3d" aria-pressed="true">3D</button>
+          </div>
+          <span id="heroOrbitHint" class="hero-orbit-hint" hidden><svg class="ic"><use href="#i-refresh"/></svg>Drag to rotate</span>
+          <div class="hero-actions" role="group" aria-label="Try a movement">
+            <button type="button" data-hero-action="wave"><svg class="ic"><use href="#i-hand"/></svg>Wave</button>
+            <button type="button" data-hero-action="dance"><svg class="ic"><use href="#i-music"/></svg>Dance</button>
+            <button type="button" data-hero-action="walk"><svg class="ic"><use href="#i-walk"/></svg>Walk</button>
+          </div>
+          <button type="button" id="heroChatToggle" class="stage-chat-toggle" aria-expanded="false" aria-controls="heroChatPanel"><svg class="ic"><use href="#i-chat"/></svg>Chat</button>
+          <div class="hero-caption-bubble" id="heroCaptionBubble" hidden></div>
         </div>
-
-        <div class="hero-stage-grid">
-          <div class="hero-stage">
-            <div class="hero-avatar-box" id="heroAvatarBox" role="button" tabindex="0" aria-label="Play or stop the spoken greeting">
-              <canvas id="heroCanvas" width="420" height="480"></canvas>
-              <div class="hero-caption-bubble" id="heroCaptionBubble" hidden></div>
-            </div>
-            <div class="scope hero-scope" aria-hidden="true">
-              <canvas id="heroScopeCanvas" width="300" height="56"></canvas>
-              <div class="scope-side">
-                <span class="scope-ipa" id="heroIpaBadge">· · ·</span>
-                <span class="scope-hz" id="heroF0Badge">tap to speak</span>
-              </div>
-            </div>
+        <div class="showcase-controls">
+          <div class="persona-pills" id="heroPersonaPills" role="group" aria-label="Choose a character"></div>
+          <button type="button" id="heroSpeakBtn" class="btn sm" title="Play or stop the greeting"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Hear greeting</span></button>
+        </div>
+        <div class="hero-mini-chat" id="heroChatPanel" hidden>
+          <div class="scope hero-scope" aria-hidden="true">
+            <canvas id="heroScopeCanvas" width="300" height="56"></canvas>
+            <div class="scope-side"><span class="scope-ipa" id="heroIpaBadge">· · ·</span><span class="scope-hz" id="heroF0Badge">tap to speak</span></div>
           </div>
-
-          <div class="hero-mini-chat">
-            <div class="mini-chat-head">
-              <div>
-                <strong id="heroBotName">Aria</strong>
-                <span id="heroBotRole">Website Concierge</span>
-              </div>
-              <button type="button" id="heroWaveBtn" class="btn xs">Wave</button>
-            </div>
-            <div class="mini-chat-log" id="heroChatLog" aria-live="polite"></div>
-            <div class="mini-chat-chips" id="heroQuickChips"></div>
-            <form id="heroChatForm" class="mini-chat-form">
-              <input type="text" id="heroChatInput" placeholder="Ask Aria a question…" autocomplete="off" aria-label="Ask the companion a question">
-              <button type="submit" class="btn sm primary">Ask</button>
-            </form>
-          </div>
+          <div class="mini-chat-log" id="heroChatLog" role="log" aria-live="polite"></div>
+          <div class="mini-chat-chips" id="heroQuickChips"></div>
+          <form id="heroChatForm" class="mini-chat-form">
+            <input type="text" id="heroChatInput" placeholder="Ask Aria a question…" autocomplete="off" aria-label="Ask the companion a question">
+            <button type="submit" class="btn sm primary">Ask</button>
+          </form>
         </div>
       </div>
     </section>
 
-    <!-- What it does -->
     <section class="features-grid" aria-labelledby="featuresHeading">
-      <h2 id="featuresHeading" class="sr-only">What bot.computer does</h2>
+      <h2 id="featuresHeading" class="sr-only">What you can make</h2>
       <article class="feature-card">
         <div class="feat-icon"><svg class="ic"><use href="#i-sculpt"/></svg></div>
-        <h3>Sculpt the face and body directly</h3>
-        <p>Drag the handles on your companion’s shoulders, chest, waist, neck, jaw, eyes and lips, or dial in exact proportions with the sliders.</p>
+        <h3>Shape a character</h3>
+        <p>Sculpt its face, choose an outfit, and see it move from every angle.</p>
       </article>
       <article class="feature-card">
         <div class="feat-icon"><svg class="ic"><use href="#i-voice"/></svg></div>
-        <h3>Lip sync from a physical vocal tract</h3>
-        <p><code>tts.wasm</code> synthesizes 24&nbsp;kHz speech and reports nine articulator positions every 5&nbsp;ms, so bilabial, labiodental and vowel shapes are the real ones.</p>
+        <h3>Find its voice</h3>
+        <p>Tune the pitch and texture. Its lips follow the speech 200 times a second.</p>
       </article>
       <article class="feature-card">
         <div class="feat-icon"><svg class="ic"><use href="#i-chat"/></svg></div>
-        <h3>A chat brain written in AIML</h3>
-        <p>Turn the avatar into a Q&amp;A guide with standard AIML XML. A base brain covers everyday small talk, and inline actions such as <code>[wave]</code> and <code>[wink]</code> make it gesture as it speaks.</p>
+        <h3>Teach it to chat</h3>
+        <p>Write a greeting and give it answers to questions about your site.</p>
       </article>
       <article class="feature-card">
         <div class="feat-icon"><svg class="ic"><use href="#i-code"/></svg></div>
-        <h3>One self-contained script</h3>
-        <p>Download a single <code>.js</code> file holding your avatar, its AIML brain and a compressed <code>tts.wasm</code>. No external servers, no fees.</p>
+        <h3>Make it at home</h3>
+        <p>Embed the avatar, voice, and chat in one script. <a href="./embed-demo.html" target="_blank" rel="noopener">See an example <svg class="ic"><use href="#i-external"/></svg></a></p>
       </article>
     </section>
 
@@ -294,12 +273,12 @@
     <section id="studioSection" class="studio-section" aria-labelledby="studioHeading">
       <div class="section-header">
         <div>
-          <h2 id="studioHeading">Design your bot</h2>
-          <p class="section-sub">Pick a starting character, then shape it on the canvas or with the sliders. <span class="autosave-note" id="autosaveNote">Changes are saved in this browser.</span></p>
+          <h2 id="studioHeading">Avatar studio</h2>
+          <p class="section-sub">Choose a character to start designing. <span class="autosave-note" id="autosaveNote">Changes are saved in this browser.</span></p>
         </div>
         <div class="section-header-actions">
           <div class="generator" id="botGenerator">
-            <button type="button" id="randomizeAllBtn" class="btn sm primary" title="Make a new bot: a name, a look, a voice and a personality"><svg class="ic"><use href="#i-dice"/></svg>Generate a bot</button>
+            <button type="button" id="randomizeAllBtn" class="btn sm primary" title="Make a new bot: a name, a look, a voice and a personality"><svg class="ic"><use href="#i-dice"/></svg><span>Generate<span class="generate-extra"> a bot</span></span></button>
             <details class="gen-menu" id="generatorMenu">
               <summary class="btn sm" title="Choose what Generate changes" aria-label="Choose what Generate changes"><svg class="ic"><use href="#i-sliders"/></svg></summary>
               <div class="gen-menu-panel" role="group" aria-label="What Generate changes">
@@ -312,10 +291,15 @@
             </details>
           </div>
           <a href="./conversation/?with=yours" target="_blank" rel="noopener" class="btn sm talk-cta" data-talk-link title="Have a spoken conversation with the bot you are designing, in a new tab"><svg class="ic"><use href="#i-mic"/></svg><span>Talk to <span class="talk-name" data-talk-name>Aria</span></span></a>
-          <button type="button" id="savePresetJsonBtn" class="btn sm" title="Download this bot (look, voice, personality and chat rules) as a JSON file"><svg class="ic"><use href="#i-download"/></svg>Download config</button>
-          <button type="button" id="loadPresetJsonBtn" class="btn sm" title="Load a saved bot configuration JSON file"><svg class="ic"><use href="#i-upload"/></svg>Load config</button>
+          <details class="gen-menu file-menu" id="studioFileMenu">
+            <summary class="btn sm">File</summary>
+            <div class="gen-menu-panel" role="group" aria-label="Configuration file">
+              <button type="button" id="savePresetJsonBtn" class="btn sm" title="Download this bot as a JSON file"><svg class="ic"><use href="#i-download"/></svg>Download config</button>
+              <button type="button" id="loadPresetJsonBtn" class="btn sm" title="Load a saved bot configuration JSON file"><svg class="ic"><use href="#i-upload"/></svg>Load config</button>
+              <button type="button" id="startOverBtn" class="btn sm" title="Discard your changes and go back to Aria"><svg class="ic"><use href="#i-reset"/></svg>Start over</button>
+            </div>
+          </details>
           <input type="file" id="loadPresetJsonInput" accept=".json,application/json" hidden>
-          <button type="button" id="startOverBtn" class="btn sm ghost" title="Discard your changes and go back to Aria"><svg class="ic"><use href="#i-reset"/></svg>Start over</button>
         </div>
       </div>
 
@@ -326,11 +310,27 @@
         <!-- LEFT: sticky stage, voice scope and speech test -->
         <div class="stage-column" id="stageColumn">
           <div class="panel stage-panel">
+            <div class="stage-toolbar turntable-toolbar">
+              <div class="seg" role="group" aria-label="Avatar preview">
+                <button type="button" id="studio2dBtn" class="active" aria-pressed="true" aria-controls="designerCanvas">2D sculpt</button>
+                <button type="button" id="studio3dBtn" aria-pressed="false" aria-controls="turntableCanvas">3D turntable</button>
+              </div>
+              <div class="turntable-actions">
+                <select id="turntableView" aria-label="3D camera angle" hidden>
+                  <option value="" disabled hidden>Free orbit</option>
+                  <option value="front">Front</option>
+                  <option value="three-quarter" selected>¾ view</option>
+                  <option value="profile">Profile</option>
+                  <option value="back">Back</option>
+                </select>
+                <button type="button" id="saveTurntableView" class="btn xs" aria-label="Save PNG" title="Download this view as a transparent PNG"><svg class="ic"><use href="#i-download"/></svg><span><span class="save-view-verb">Save </span>PNG</span></button>
+              </div>
+            </div>
             <div class="stage-toolbar">
               <div class="seg" id="framingSeg" role="group" aria-label="Camera framing">
                 <button type="button" data-framing="bust">Bust</button>
                 <button type="button" data-framing="half" class="active"><span>Half<span class="seg-extra"> body</span></span></button>
-                <button type="button" data-framing="full"><span>Full<span class="seg-extra"> torso</span></span></button>
+                <button type="button" data-framing="full"><span>Full<span class="seg-extra" id="fullFramingDetail"> torso</span></span></button>
                 <button type="button" data-framing="cutout">Cutout</button>
               </div>
 
@@ -346,6 +346,7 @@
             <div class="stage-block">
               <div class="designer-canvas-wrap" id="designerCanvasWrap">
                 <canvas id="designerCanvas" width="520" height="580" aria-label="Avatar stage. Drag the handles to sculpt."></canvas>
+                <canvas id="turntableCanvas" width="520" height="580" aria-label="3D avatar preview. Drag to orbit, or choose a camera angle." hidden></canvas>
 
                 <div class="stage-live-overlay">
                   <span class="live-pill sculpt" id="sculptLiveHud" hidden></span>
@@ -354,30 +355,18 @@
                   <span class="live-pill f0" id="liveF0Badge" hidden></span>
                 </div>
 
-                <!-- Mobile quick controls while the stage is docked -->
-                <div class="mobile-stage-fab">
-                  <button type="button" id="mobileQuickSpeakBtn" class="stage-fab-btn primary"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Speak</span></button>
-                  <button type="button" id="mobileScriptToggleBtn" class="stage-fab-btn"><svg class="ic"><use href="#i-pencil"/></svg><span class="btn-label">Script</span></button>
-                </div>
-
                 <div class="sculpt-hint-bar" id="sculptHintBar">Drag any node to reshape the head, shoulders, chest or waist.</div>
-              </div>
-
-              <!-- Live articulation scope: what the vocal tract is doing right now -->
-              <div class="scope studio-scope" role="img" aria-label="Live articulation traces for jaw, tongue, lips, nasal and voicing">
-                <div class="scope-labels" aria-hidden="true">
-                  <span class="ch-jaw">Jaw</span>
-                  <span class="ch-tongue">Tongue</span>
-                  <span class="ch-lips">Lips</span>
-                  <span class="ch-nasal">Nasal</span>
-                  <span class="ch-voice">Voicing</span>
-                </div>
-                <canvas id="studioScopeCanvas" width="400" height="90"></canvas>
+                <div class="sculpt-hint-bar" id="turntableHint" hidden>Drag to rotate the avatar.</div>
               </div>
             </div>
 
-            <!-- Speech test -->
-            <div class="audition-box">
+            <div class="stage-audition-bar">
+              <button type="button" id="mobileScriptToggleBtn" class="btn sm" aria-expanded="false" aria-controls="studioAuditionPanel"><svg class="ic"><use href="#i-voice"/></svg>Voice &amp; gestures</button>
+              <button type="button" id="mobileQuickSpeakBtn" class="btn sm primary"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Speak</span></button>
+            </div>
+            <div class="audition-box" id="studioAuditionPanel" hidden>
+              <label class="tiny-label" for="auditionText">Line to speak</label>
+              <textarea id="auditionText" rows="2" spellcheck="false">[cheerful] Hi! [wave] Welcome to our website! [wink]</textarea>
               <div class="tag-insert-bar" role="group" aria-label="Insert a voice tag">
                 <span class="tiny-label">Voice</span>
                 <button type="button" class="mini-tag" data-ins="[cheerful] ">Cheerful</button>
@@ -398,14 +387,18 @@
                 <span class="tiny-label">Sounds</span>
               </div>
 
-              <textarea id="auditionText" rows="2" spellcheck="false" aria-label="Line for the bot to speak">[cheerful] Hi! [wave] Welcome to our website! Move your mouse around and watch my eyes follow you, or sculpt my body right on the canvas! [wink]</textarea>
-
               <div class="audition-actions">
                 <button type="button" id="studioSpeakBtn" class="btn primary"><svg class="ic"><use href="#i-play"/></svg><span class="btn-label">Speak</span></button>
                 <button type="button" id="studioStopBtn" class="btn" disabled><svg class="ic"><use href="#i-stop"/></svg>Stop</button>
                 <button type="button" id="downloadWavBtn" class="btn xs" title="Download this line as a 24 kHz WAV file"><svg class="ic"><use href="#i-download"/></svg>WAV</button>
               </div>
               <div class="synth-perf-line" id="studioStatusLine" role="status">Loading voice…</div>
+              <div class="scope studio-scope" role="img" aria-label="Live articulation traces for jaw, tongue, lips, nasal and voicing">
+                <div class="scope-labels" aria-hidden="true">
+                  <span class="ch-jaw">Jaw</span><span class="ch-tongue">Tongue</span><span class="ch-lips">Lips</span><span class="ch-nasal">Nasal</span><span class="ch-voice">Voicing</span>
+                </div>
+                <canvas id="studioScopeCanvas" width="400" height="90"></canvas>
+              </div>
             </div>
           </div>
         </div>
@@ -874,22 +867,20 @@
                     <span>When the visitor says <em class="field-hint"><code>*</code> and <code>#</code> are wildcards, <code>|</code> separates alternatives</em></span>
                     <input type="text" id="qaPatternInput" placeholder="# business hours # | when are you open">
                   </label>
-                  <div class="field">
-                    <span id="qaExtrasLabel">Opening gesture and follow-up chips</span>
-                    <div class="inline-pair">
-                      <select id="qaEmoteSelect" aria-label="Opening gesture">
-                        <option value="">No gesture</option>
-                      </select>
-                      <input type="text" id="qaChipsInput" placeholder="Pricing, Contact us" aria-label="Follow-up chips, comma separated">
-                    </div>
-                  </div>
-                </div>
-                <div class="qa-answer-row gap-top">
                   <label class="field">
-                    <span>The bot answers</span>
+                    <span>Follow-up chips <em class="field-hint">Optional, separated by commas</em></span>
+                    <input type="text" id="qaChipsInput" placeholder="Pricing, Contact us">
+                  </label>
+                </div>
+                <div class="qa-tour-fields gap-top" id="qaReplyFields">
+                  <label class="field">
+                    <span id="qaAnswerLabel">The bot answers</span>
                     <input type="text" id="qaAnswerInput" placeholder="[cheerful] We are open Monday through Friday from 9 AM to 6 PM!">
                   </label>
-                  <button type="button" id="addQaRuleBtn" class="btn primary"><svg class="ic"><use href="#i-plus"/></svg>Add rule</button>
+                  <label class="field">
+                    <span id="qaGestureLabel">Opening gesture</span>
+                    <select id="qaEmoteSelect"><option value="">No gesture</option></select>
+                  </label>
                 </div>
                 <!-- Actions can go anywhere in an answer; they play when the voice reaches them -->
                 <div class="tag-insert-bar gap-top" id="qaActionBar" role="group" aria-label="Insert an avatar action into the answer">
@@ -899,6 +890,41 @@
                 <div class="tag-insert-bar gap-top sound-palette" id="qaSoundBar" role="group" aria-label="Insert a sound into the answer" hidden>
                   <span class="tiny-label">Add a sound</span>
                 </div>
+                <details class="qa-guide gap-top" id="qaGuideOptions">
+                  <summary>Guide to a page element or build a tour</summary>
+                  <fieldset class="qa-tour-stop" id="qaFirstStop">
+                    <legend hidden>Stop 1</legend>
+                    <label class="field" for="qaShowcaseInput">
+                      <span>Page target</span>
+                      <input type="text" id="qaShowcaseInput" placeholder="pricing" maxlength="64" spellcheck="false" autocapitalize="none" aria-describedby="qaShowcaseHelp">
+                    </label>
+                    <button type="button" id="qaTourPaletteToggle" class="btn xs gap-top" aria-expanded="false" aria-controls="qaTourPalette" hidden>Timed actions and sounds</button>
+                    <div id="qaTourPalette" hidden></div>
+                    <div class="qa-stop-actions" hidden>
+                      <button type="button" class="btn xs" data-step-action="down">Move down</button>
+                      <button type="button" class="btn xs" data-step-action="remove">Remove</button>
+                    </div>
+                  </fieldset>
+                  <p id="qaShowcaseHelp">Give each section or button the matching ID, or add an attribute such as <code id="qaShowcaseAttr">data-bot-showcase="pricing"</code> to its opening tag.</p>
+                  <div id="qaTourStops"></div>
+                  <template id="qaTourStopTemplate">
+                    <fieldset class="qa-tour-stop">
+                      <legend></legend>
+                      <label class="field"><span>Page target</span><input type="text" name="target" maxlength="64" placeholder="contact" spellcheck="false" autocapitalize="none"></label>
+                      <div class="qa-tour-fields">
+                        <label class="field"><span>Explanation</span><input type="text" name="answer" placeholder="What should the avatar say here?"></label>
+                        <label class="field"><span>Gesture</span><select name="emote"></select></label>
+                      </div>
+                      <div class="qa-stop-actions">
+                        <button type="button" class="btn xs" data-step-action="up">Move up</button>
+                        <button type="button" class="btn xs" data-step-action="down">Move down</button>
+                        <button type="button" class="btn xs" data-step-action="remove">Remove</button>
+                      </div>
+                    </fieldset>
+                  </template>
+                  <button type="button" class="btn sm gap-top" id="qaAddTourStop"><svg class="ic"><use href="#i-plus"/></svg>Add tour stop</button>
+                </details>
+                <button type="button" id="addQaRuleBtn" class="btn primary gap-top"><svg class="ic"><use href="#i-plus"/></svg>Add rule</button>
               </div>
 
               <!-- Raw AIML editor -->
@@ -954,7 +980,7 @@
       <div class="section-header">
         <div>
           <h2 id="embedHeading">Preview and export</h2>
-          <p class="section-sub">Try the real widget inside a sample page, then download it as a single file.</p>
+          <p class="section-sub">Choose what visitors can do, try it on the sample page, then add the widget to your site.</p>
         </div>
         <div class="seg" id="previewViewportSeg" role="group" aria-label="Preview size">
           <button type="button" data-vp="desktop" class="active"><svg class="ic"><use href="#i-desktop"/></svg>Desktop</button>
@@ -972,23 +998,16 @@
               <button type="button" id="remountPreviewBtn" class="mock-reload" title="Reload the widget" aria-label="Reload the widget"><svg class="ic"><use href="#i-refresh"/></svg></button>
             </div>
             <div class="mock-webpage" id="mockWebpage">
-              <div class="mock-site-nav">
-                <strong id="mockSiteBrand">YourBrand</strong>
-                <div class="mock-links"><span>Product</span><span>Pricing</span><span>Docs</span></div>
-              </div>
-              <div class="mock-site-hero">
-                <h3 id="mockSiteHeadline">Your page, with the companion in the corner.</h3>
-                <p>This is the real widget. Press <strong>Speak</strong> or <strong>Ask</strong> on it to test lip sync, gaze tracking, minimizing and the mobile layout.</p>
-                <div class="mock-cards">
-                  <div class="mock-mini-card">
-                    <strong>Isolated in Shadow DOM</strong>
-                    <span>Your site’s CSS never collides with the companion or its chat.</span>
-                  </div>
-                  <div class="mock-mini-card">
-                    <strong>Docks on phones</strong>
-                    <span>Switch to Mobile above to see the compact layout.</span>
-                  </div>
+              <div class="mock-page-content">
+                <div class="mock-site-nav">
+                  <strong id="mockSiteBrand">YourBrand</strong>
+                  <div class="mock-links"><span>Product</span><span>Pricing</span><span>Docs</span></div>
                 </div>
+                <div class="mock-site-hero">
+                  <h3 id="mockSiteHeadline">Meet your website companion.</h3>
+                  <p id="mockVisitorHint">Try the controls on the avatar to see what visitors will experience.</p>
+                </div>
+                <div id="mockGuideTargets" class="mock-guide-targets" hidden></div>
               </div>
               <!-- The Shadow DOM widget mounts here in `contained` mode -->
             </div>
@@ -997,8 +1016,15 @@
 
         <!-- Export controls and snippets -->
         <div class="panel export-panel">
-          <h3>Placement and behavior</h3>
-          <div class="field-row two-col">
+          <h3>Embed settings</h3>
+          <div class="field-row three-col">
+            <label class="field">
+              <span>Avatar style</span>
+              <select id="embedRenderMode">
+                <option value="3d">3D character</option>
+                <option value="2d">2D illustration</option>
+              </select>
+            </label>
             <label class="field">
               <span>Corner</span>
               <select id="embedPositionSelect">
@@ -1016,43 +1042,68 @@
             </label>
           </div>
 
+          <fieldset class="embed-components">
+            <legend>Include in the embed</legend>
+            <div class="checks-strip">
+              <label class="check-field"><input type="checkbox" id="embedSpeechEnabled" checked> <span>Spoken voice</span></label>
+              <label class="check-field"><input type="checkbox" id="embedChatEnabled" checked> <span>Chat and tours</span></label>
+              <label class="check-field"><input type="checkbox" id="embedBaseBrain" checked> <span>Built-in small talk</span></label>
+            </div>
+            <p class="install-help" id="embedSizeHint" aria-live="polite"></p>
+          </fieldset>
           <div class="checks-strip gap-top">
             <label class="check-field"><input type="checkbox" id="embedEyeTrackCheck" checked> <span>Follow the cursor</span></label>
-            <label class="check-field"><input type="checkbox" id="embedCaptionsCheck" checked> <span>Word-synced captions</span></label>
+            <label class="check-field"><input type="checkbox" id="embedCaptionsCheck" checked> <span>Captions</span></label>
             <label class="check-field"><input type="checkbox" id="embedAutoGreetCheck"> <span>Greet on arrival</span></label>
             <label class="check-field"><input type="checkbox" id="embedStartOpenCheck"> <span>Start with chat open</span></label>
           </div>
 
-          <hr class="divider">
-
-          <div class="download-hero-box">
-            <h4>Download as one file <code id="selfContainedFilenameLabel">aria-bot.js</code></h4>
-            <p>Your avatar, voice settings, AIML brain and a compressed <code>tts.wasm</code>, packed into a single script. Works offline, about 1&nbsp;MB.</p>
-            <div class="dl-buttons">
-              <button type="button" id="downloadSelfContainedJsBtn" class="btn primary full-w"><svg class="ic"><use href="#i-download"/></svg>Download self-contained .js</button>
-              <button type="button" id="downloadDemoHtmlBtn" class="btn full-w"><svg class="ic"><use href="#i-download"/></svg>Download a standalone demo page</button>
-            </div>
-            <div class="dl-status" id="exportStatusText" role="status" hidden></div>
+          <div class="visitor-permissions" id="visitorOptions">
+            <label class="visitor-opt-in" for="embedVisitorCustomize">
+              <input type="checkbox" id="embedVisitorCustomize" aria-describedby="embedVisitorHelp">
+              <span><strong>Let visitors customize the avatar</strong><small id="embedVisitorHelp">Adds a Customize button to the widget. Visitors can change its appearance and restore your original design.</small></span>
+            </label>
+            <button type="button" class="btn sm" id="tryVisitorCustomize" hidden>Try in preview <svg class="ic"><use href="#i-arrow-right"/></svg></button>
           </div>
 
-          <div class="multi-file-row">
-            <span class="tiny-label">Or get the separate files</span>
-            <button type="button" id="dlEmbedRuntimeBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>bot-embed.js</button>
-            <button type="button" id="dlRawWasmBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>tts.wasm</button>
-            <button type="button" id="dlAimlOnlyBtn" class="btn xs"><svg class="ic"><use href="#i-download"/></svg>brain.aiml</button>
+          <hr class="divider">
+
+          <div class="install-heading">
+            <h3>Add to your site</h3>
+            <label class="field">
+              <span class="sr-only">Installation method</span>
+              <select id="embedInstallMethod">
+                <option value="self">One file</option>
+                <option value="hosted">Hosted embed</option>
+                <option value="multi">Separate files</option>
+                <option value="sdk">JavaScript API</option>
+              </select>
+            </label>
+          </div>
+          <p class="install-help" id="embedInstallHelp">Save the bot script next to your HTML file. Paste the tag below before your closing body tag.</p>
+          <details class="qa-guide install-guide" id="installGuide" hidden>
+            <summary>Connect page elements</summary>
+            <p>Give each destination the matching HTML ID, or copy its attribute onto the section or button the avatar should show.</p>
+            <ul id="installGuideList"></ul>
+          </details>
+          <div id="singleFileDownloads" class="install-files">
+            <button type="button" id="downloadSelfContainedJsBtn" class="btn primary"><svg class="ic"><use href="#i-download"/></svg>Download <span id="selfContainedFilenameLabel">aria-bot.js</span></button>
+          </div>
+          <div class="install-files" id="multiFileDownloads" hidden>
+            <button type="button" id="dlEmbedRuntimeBtn" class="btn sm"><svg class="ic"><use href="#i-download"/></svg>bot-embed.js</button>
+            <button type="button" id="dlRawWasmBtn" class="btn sm"><svg class="ic"><use href="#i-download"/></svg>tts.wasm</button>
+            <button type="button" id="dlAimlOnlyBtn" class="btn sm"><svg class="ic"><use href="#i-download"/></svg><span id="installBrainFilename">aria-brain.aiml</span></button>
           </div>
 
           <div class="snippet-box-wrap">
             <div class="block-head snippet-head">
-              <div class="seg" id="snippetModeSeg" role="group" aria-label="Embed snippet format">
-                <button type="button" data-snip="self" class="active">One file</button>
-                <button type="button" data-snip="multi">Separate files</button>
-                <button type="button" data-snip="sdk">JS API</button>
-              </div>
-              <button type="button" id="copySnippetBtn" class="btn xs"><svg class="ic"><use href="#i-copy"/></svg><span class="btn-label">Copy</span></button>
+              <span class="tiny-label">Embed code</span>
+              <button type="button" id="copySnippetBtn" class="btn xs"><svg class="ic"><use href="#i-copy"/></svg><span class="btn-label">Copy code</span></button>
             </div>
             <pre class="code-pre" tabindex="0" aria-label="Embed code"><code id="embedCodeOutput"></code></pre>
           </div>
+          <div class="install-demo"><button type="button" id="downloadDemoHtmlBtn" class="btn sm"><svg class="ic"><use href="#i-download"/></svg>Download an offline demo page</button></div>
+          <div class="dl-status" id="exportStatusText" role="status" hidden></div>
         </div>
       </div>
     </section>
@@ -1079,15 +1130,19 @@
         </details>
         <details class="faq-item">
           <summary><h3>How do I add the avatar to my website?</h3></summary>
-          <p>Download the self-contained <code>.js</code> file from <a href="#embedSection">Preview and export</a>, put it next to your page and add one script tag. The companion appears in the corner of the page inside a Shadow DOM, so your site’s styles and its own can’t interfere with each other. The file is about 1&nbsp;MB and works offline.</p>
+          <p>Download the self-contained <code>.js</code> file from <a href="#embedSection">Export</a>, put it next to your page and add one script tag. The companion appears in the corner of the page inside a Shadow DOM, so your site’s styles and its own can’t interfere with each other. The downloaded script works offline. The Hosted embed option lets you paste a tag that loads the runtime and voice from the studio’s host.</p>
         </details>
         <details class="faq-item">
           <summary><h3>How does the lip sync work?</h3></summary>
           <p>The speech comes from a physical model of the human vocal tract rather than from recordings. Every 5 milliseconds the model reports where the jaw, tongue and lips are, and the avatar’s mouth is drawn from those positions, so the lip shapes always match the sound.</p>
         </details>
         <details class="faq-item">
-          <summary><h3>Can the avatar gesture while it talks?</h3></summary>
-          <p>Yes. Write an action such as <code>[wave]</code>, <code>[wink]</code> or <code>[nod]</code> anywhere in a greeting or an answer, and the avatar performs it when the speech reaches that point. The tag itself is never spoken. Voice styles such as <code>[cheerful]</code> or <code>[sad]</code> change the face as well as the voice.</p>
+          <summary><h3>Can visitors choose their own look?</h3></summary>
+          <p>Enable <a href="#visitorOptions">Let visitors customize the avatar</a> before exporting. Each visitor can open Customize on the widget to choose hair, clothes, glasses and colors. Their choices stay in their browser, and Restore original look brings back your design. <a href="./embed-demo.html#customize">Try the visitor view</a>.</p>
+        </details>
+        <details class="faq-item">
+          <summary><h3>How do I ask the avatar to move?</h3></summary>
+          <p>With everyday small talk enabled, ask “What moves can you do?” or “Walk then wave.” To choreograph a greeting or an AIML answer, write <code>[wave]</code>, <code>[dance]</code> or another action where you want it to happen. The tag itself is never spoken. Voice styles such as <code>[cheerful]</code> or <code>[sad]</code> change the face as well as the voice.</p>
         </details>
         <details class="faq-item">
           <summary><h3>Can I talk to it out loud?</h3></summary>

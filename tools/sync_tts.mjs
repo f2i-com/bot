@@ -9,14 +9,12 @@ const botRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const candidateTtsDirs = [
   process.env.TTS_REPO_DIR,
   path.resolve(botRoot, "..", "tts"),
-  "E:\\repos\\softn_bot\\tts",
-  "E:\\repos\\bot-computer-app\\tts",
 ].filter(Boolean);
 
 const ttsDir = candidateTtsDirs.find((d) => fs.existsSync(path.join(d, "Cargo.toml")));
 if (!ttsDir) {
   throw new Error(
-    `Could not locate TTS repository. Checked:\n  - ${candidateTtsDirs.join("\n  - ")}`
+    `Set TTS_REPO_DIR to your TTS checkout. Checked:\n  - ${candidateTtsDirs.join("\n  - ")}`
   );
 }
 
